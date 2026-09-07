@@ -1,194 +1,247 @@
 # AgentFighting Architecture
 
-## Goal
+## Architectural goal
 
-AgentFighting is an **AI strategy simulation first** and a renderer second.
+AgentFighting separates **controller strategy**, **authoritative simulation**, **evaluation evidence**, and **presentation** so each can evolve independently.
 
-The same generated controllers must be able to run:
+The same controller set must be able to run:
 
-- with no UI for batch evaluation,
-- in a lightweight 2D renderer,
-- in a polished Three.js / Rapier renderer,
-- in replay mode from recorded state/events.
+- headlessly for batch tournaments,
+- in the live arena viewer,
+- in replay mode from recorded match data,
+- in future renderers without changing match rules.
 
 ## Dependency direction
 
 ```text
-Generated Controller
-        |
-        v
-+-------------------+
-| Observation API   |
-+-------------------+
-        |
-        v
-+-------------------+
-| Headless Engine   |
-| - tick scheduler  |
-| - movement        |
-| - combat resolver |
-| - weapons         |
-| - chaos events    |
-| - stocks / winner |
-+-------------------+
-        |
-        +--------------------+
-        |                    |
-        v                    v
- Match Summary          World Snapshot
-        |                    |
-        v                    v
- AI post-match          Renderer Adapter
- analysis               2D / 3D / replay
+ControllerSubmission
+        ↓
+controllers / sandbox
+        ↓
+AgentController contract
+        ↓
++------------------------+
+| Authoritative Engine   |
+| state + rules + RNG    |
++------------------------+
+        ↓
+WorldState / MatchSummary / TickRecord
+        ↓
++----------------+----------------+----------------+
+| replay         | evaluation     | renderers      |
+| MatchRecord    | tournament     | view models    |
+| verification   | fingerprints   | MatchSession   |
++----------------+----------------+----------------+
+        ↓                 ↓                ↓
+replay UI            Tournament Lab      Live Arena
 ```
 
-The renderer never owns match truth.
+The engine has no dependency on React, DOM, rendering libraries or tournament UI.
 
-## Tick model
+## Authoritative tick model
 
-Every simulation tick follows the same order:
+Each tick follows one logical transaction:
 
 ```text
-1. Advance timers / world events
-2. Freeze the current world state
-3. Build Observation for every living agent
-4. Run every Controller against that same tick snapshot
-5. Sanitize all returned Actions
-6. Apply movement / dodge
-7. Resolve pickup / weapon / attacks
-8. Integrate world motion
-9. Resolve body collision
-10. Resolve stock loss / respawn / elimination / winner
-11. Emit events and expose a new WorldState
+1. advance authoritative timers/events
+2. produce observations from state N
+3. collect every active controller action from state N
+4. sanitize every action
+5. resolve actions against the authoritative world
+6. integrate movement / combat / weapons / collisions
+7. resolve stocks / respawns / elimination / winner
+8. emit events and tick record
+9. expose state N+1
 ```
 
-This prevents execution-order advantage. Claude being evaluated before Codex in JavaScript does not mean Codex gets to see Claude's already-applied move.
+The critical invariant is that controller execution order must not create information advantage.
+
+## Controller identity and locking
+
+Before a seeded evaluation begins, every submission receives stable identity data derived from its content.
+
+```text
+submission source
+      ↓
+sourceHash
+      ↓
+controllerId
+      ↓
+ControllerLock
+```
+
+`ControllerLock` records the exact participants, model labels, strategy labels and source hashes used by the tournament. The lock itself has a stable `lockHash` that excludes wall-clock metadata.
+
+Once locked, controller source must not change during the tournament.
+
+## Runtime boundary
+
+There are intentionally two execution paths.
+
+### Trusted local path
+
+`compileTrustedControllerSource()` compiles built-in/sample source for local evaluation.
+
+This path uses `new Function`. It is convenient but **not a security sandbox**.
+
+### External browser path
+
+The browser Worker runtime isolates controller execution from the UI thread and supports:
+
+- startup timeout
+- per-tick timeout
+- termination on timeout/failure
+- same-tick asynchronous action collection
+- neutral fallback actions
+
+This improves fault isolation but is not enough for hostile public multi-tenant execution.
+
+### Future server path
+
+A public submission platform should add a process/container runtime with hard limits for:
+
+- CPU time
+- memory
+- filesystem
+- network
+- process lifetime
+- output size
+
+The server runtime should implement the same logical controller protocol instead of modifying the engine.
 
 ## Determinism
 
-A match is identified by:
+A reproducible match is defined by:
 
 ```text
-controller source/commit
+controller identities
 + engine version
 + ArenaConfig
 + seed
 ```
 
-All engine randomness goes through the seeded RNG. UI animation randomness is allowed, but it cannot affect simulation state.
+All authoritative randomness comes from the engine RNG. Renderer animation randomness may exist but cannot feed back into simulation state.
 
-This gives us two useful modes:
+## Replay model
 
-### Replay mode
+Replay is structured simulation evidence, not video.
 
-Same controllers + same seed = same simulation result.
+`MatchRecord` contains enough data to inspect a match without rerunning model inference:
 
-### Tournament mode
+- engine/schema version
+- seed/config
+- controller descriptors
+- initial state
+- sanitized actions per tick
+- authoritative state snapshots
+- public events
+- final summary
 
-Same controllers + many seeds = behavior distribution instead of one lucky match.
+Action-only replay verification can rerun the authoritative engine and compare results, while snapshot playback can support scrubbing and debugging.
 
-## Generated agent boundary
+## Tournament evaluation
 
-Models implement only:
+A single match is too noisy to characterize controller behavior. Tournament evaluation runs the same locked participant set across many seeds and aggregates:
 
-```ts
-interface AgentController {
-  act(observation: Readonly<Observation>): Action
-}
-```
+- wins / win rate
+- average rank
+- combat stats
+- movement stats
+- weapon behavior
+- behavior fingerprint dimensions
 
-They cannot import the engine, renderer, physics implementation, React, Three.js, or another controller.
-
-`Action` is validated by `sanitizeAction()` before the engine accepts it.
-
-Later generated code should run inside a Worker/sandbox with CPU/time/memory limits. A controller exception falls back to an idle action for that tick rather than crashing the match.
-
-## Observation philosophy
-
-Observation exposes facts, not conclusions.
-
-Good:
+The current fingerprint dimensions are:
 
 ```text
-enemy position
-enemy velocity
-damage
-distance to edge
-nearby weapon type / position
-recent hit events
+aggression
+accuracy
+weaponUsage
+edgeRisk
+mobility
+survival
 ```
 
-Avoid:
+These are descriptive signals, not an overall model score.
+
+## Portable artifacts
+
+`TournamentArtifact` is the versioned evidence bundle for one evaluation set.
+
+It contains:
 
 ```text
-bestTarget = Claude
-threatScore = 0.92
-safeDirection = left
+ControllerLock
+ControllerSubmissions
+TournamentResult
+MatchRecords
 ```
 
-Those conclusions should be part of the generated strategy so different models have room to behave differently.
+A Markdown report is derived from the artifact. Reports and UI are views over artifact data; they are not authoritative sources.
 
-## Strategy diversity
+## Renderer boundary
 
-The game should continuously create trade-offs where multiple choices are defensible:
+Renderers receive immutable engine data through passive adapters such as `MatchSession` and `ArenaViewModel`.
 
-```text
-finish a damaged enemy
-vs
-escape the edge
-vs
-steal a weapon
-vs
-stay out of a multi-agent fight
-```
+A renderer may:
 
-If one rule is always optimal, all generated controllers converge and the project becomes visually repetitive.
+- interpolate positions
+- animate attacks and impacts
+- choose camera/layout
+- filter events for presentation
+- provide replay controls
 
-## Match data
+A renderer may not:
 
-The engine records structured events instead of depending on video:
+- apply damage
+- choose collision outcomes
+- consume weapons authoritatively
+- alter stocks
+- create chaos events
+- select the winner
 
-```text
-hit
-weapon-pickup
-weapon-use
-stock-lost
-respawn
-eliminated
-chaos
-win
-```
+## Current product surfaces
 
-`MatchSummary` is the stable input for post-match AI review and future behavior fingerprints.
+### Live Arena `/`
 
-## Renderer contract
+Consumes an authoritative `MatchSession` and presents a lightweight 2D/2.5D real-time view.
 
-Renderers consume `WorldState` only.
+### Tournament Lab `/tournament`
 
-```ts
-interface ArenaRenderer {
-  render(state: Readonly<WorldState>): void
-  onMatchEnd?(summary: MatchSummary): void
-}
-```
+Runs the local seeded evaluation workflow and presents:
 
-Possible implementations:
+- strategy manifests
+- controller lock/hashes
+- rankings
+- behavior fingerprints
+- per-seed replay scrubbing
+- highlight navigation
+- JSON artifact export
+- Markdown report export
 
-```text
-Canvas2DRenderer
-PixiRenderer
-ThreeRenderer
-ReplayRenderer
-DebugRenderer
-```
+## Architecture freeze for v1
 
-Changing the renderer should not require changing an agent controller or match rule.
+The following choices are considered settled for v1:
 
-## Current priorities
+- one authoritative headless engine
+- renderer-agnostic rules
+- same-tick observation/action semantics
+- deterministic engine RNG
+- controller submission schema
+- pre-evaluation controller locking
+- versioned replay/tournament artifacts
+- trusted versus external runtime separation
 
-1. Headless engine correctness
-2. Controller strategy freedom
-3. Batch simulation and statistics
-4. Replay / seed reproducibility
-5. Generated-controller sandbox
-6. Only then choose the final 2D/3D presentation layer
+Do not introduce a parallel engine, replay format or tournament pipeline to ship a feature faster.
+
+## Next architecture work
+
+The next phase focuses on scale and product boundaries rather than rewriting the engine:
+
+1. submission workspace and validation UI
+2. Worker-backed execution for user-supplied browser submissions
+3. tournament worker with progress/partial results
+4. artifact import/persistence and stronger replay tooling
+5. hardened server runtime design for public hostile submissions
+6. renderer polish after the execution/evaluation path is stable
+
+See `PLAN.md` for milestone-level tasks.
