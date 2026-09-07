@@ -7,7 +7,7 @@ AgentFighting separates **controller strategy**, **authoritative simulation**, *
 The same controller set must be able to run:
 
 - headlessly for batch tournaments,
-- in the live arena viewer,
+- in the live Three.js arena viewer,
 - in replay mode from recorded match data,
 - in future renderers without changing match rules.
 
@@ -33,10 +33,14 @@ WorldState / MatchSummary / TickRecord
 | verification   | fingerprints   | MatchSession   |
 +----------------+----------------+----------------+
         ↓                 ↓                ↓
-replay UI            Tournament Lab      Live Arena
+replay UI            Tournament Lab      presentation
+                                           ↓
+                              Three.js scene + ArenaFx
+                                           ↓
+                                      React HUD
 ```
 
-The engine has no dependency on React, DOM, rendering libraries or tournament UI.
+The engine has no dependency on React, DOM, WebGL, Three.js or tournament UI.
 
 ## Authoritative tick model
 
@@ -98,14 +102,7 @@ This improves fault isolation but is not enough for hostile public multi-tenant 
 
 ### Future server path
 
-A public submission platform should add a process/container runtime with hard limits for:
-
-- CPU time
-- memory
-- filesystem
-- network
-- process lifetime
-- output size
+A public submission platform should add a process/container runtime with hard limits for CPU time, memory, filesystem, network, process lifetime and output size.
 
 The server runtime should implement the same logical controller protocol instead of modifying the engine.
 
@@ -120,7 +117,7 @@ controller identities
 + seed
 ```
 
-All authoritative randomness comes from the engine RNG. Renderer animation randomness may exist but cannot feed back into simulation state.
+All authoritative randomness comes from the engine RNG. Renderer animation/particle randomness may exist but cannot feed back into simulation state.
 
 ## Replay model
 
@@ -141,16 +138,9 @@ Action-only replay verification can rerun the authoritative engine and compare r
 
 ## Tournament evaluation
 
-A single match is too noisy to characterize controller behavior. Tournament evaluation runs the same locked participant set across many seeds and aggregates:
+A single match is too noisy to characterize controller behavior. Tournament evaluation runs the same locked participant set across many seeds and aggregates wins, average rank, combat stats, movement stats, weapon behavior and behavior fingerprints.
 
-- wins / win rate
-- average rank
-- combat stats
-- movement stats
-- weapon behavior
-- behavior fingerprint dimensions
-
-The current fingerprint dimensions are:
+Current fingerprint dimensions:
 
 ```text
 aggression
@@ -187,6 +177,9 @@ A renderer may:
 - interpolate positions
 - animate attacks and impacts
 - choose camera/layout
+- render weapons from authoritative weapon state
+- map public events to particles and transient effects
+- visualize short controller `intent` labels
 - filter events for presentation
 - provide replay controls
 
@@ -198,29 +191,83 @@ A renderer may not:
 - alter stocks
 - create chaos events
 - select the winner
+- feed presentation state back into simulation
+
+## Three.js presentation architecture
+
+Three.js is the default live renderer, but remains downstream of renderer-neutral data.
+
+```text
+WorldState + public events
+        ↓
+createArenaViewModel()
+        ↓
+ThreeArenaViewport
+   ├─ scene / lighting / arena geometry
+   ├─ fighter visuals
+   ├─ weapon visuals
+   ├─ camera framing
+   └─ ArenaFx
+        ↓
+WebGL output
+
+React HUD consumes the same ArenaViewModel in parallel.
+```
+
+### `ThreeArenaViewport`
+
+Responsible for long-lived scene objects and interpolation:
+
+- fighters
+- weapon pickups
+- arena geometry
+- lighting/fog
+- spectator camera
+- chaos presentation state
+
+It may interpolate from one engine snapshot to another but does not create authoritative motion.
+
+### `ArenaFx`
+
+`ArenaFx` owns short-lived presentation-only effects:
+
+- particle bursts
+- movement trails
+- event rings
+- future attack/projectile/hazard visuals
+
+Effects are spawned from authoritative events or observable renderer data. Their random spread/lifetime is decorative only.
+
+### Future camera director
+
+Camera behavior should be extracted from `ThreeArenaViewport` when complexity grows. A camera director may select overview, combat-focus, KO emphasis and replay-highlight shots using observable state/events only.
+
+### Future post-processing
+
+Bloom, vignette, hit flash or other post-processing belongs entirely in presentation. Post FX must remain optional and should support quality tiers for mobile devices.
 
 ## Current product surfaces
 
 ### Live Arena `/`
 
-Consumes an authoritative `MatchSession` and presents a lightweight 2D/2.5D real-time view.
+Consumes an authoritative `MatchSession` and presents:
+
+- Three.js 3D arena
+- animated fighter/weapon visuals
+- particles and event effects
+- dynamic spectator camera
+- game-style React HUD
+- live event stream and match controls
 
 ### Tournament Lab `/tournament`
 
-Runs the local seeded evaluation workflow and presents:
+Runs the local seeded evaluation workflow and presents strategy manifests, controller lock/hashes, rankings, behavior fingerprints, per-seed replay scrubbing, highlight navigation and artifact/report export.
 
-- strategy manifests
-- controller lock/hashes
-- rankings
-- behavior fingerprints
-- per-seed replay scrubbing
-- highlight navigation
-- JSON artifact export
-- Markdown report export
+The replay surface should progressively converge on the same Three.js presentation primitives used by live matches.
 
 ## Architecture freeze for v1
 
-The following choices are considered settled for v1:
+The following choices are settled:
 
 - one authoritative headless engine
 - renderer-agnostic rules
@@ -235,13 +282,14 @@ Do not introduce a parallel engine, replay format or tournament pipeline to ship
 
 ## Next architecture work
 
-The next phase focuses on scale and product boundaries rather than rewriting the engine:
+Current order:
 
-1. submission workspace and validation UI
-2. Worker-backed execution for user-supplied browser submissions
-3. tournament worker with progress/partial results
-4. artifact import/persistence and stronger replay tooling
-5. hardened server runtime design for public hostile submissions
-6. renderer polish after the execution/evaluation path is stable
+1. finish Three.js Presentation Phase 2 readability
+2. submission workspace and validation UI
+3. Worker-backed execution for user-supplied browser submissions
+4. tournament worker with progress/partial results
+5. artifact import/persistence and Three.js replay parity
+6. shared camera director and optional post-FX pipeline
+7. hardened server runtime design for public hostile submissions
 
 See `PLAN.md` for milestone-level tasks.
