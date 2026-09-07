@@ -138,6 +138,17 @@ export interface AgentDefinition {
   createController(): AgentController;
 }
 
+export interface ControllerExecutionInput {
+  agentId: AgentId;
+  controller: AgentController;
+  observation: Readonly<Observation>;
+}
+
+export interface ControllerRuntime {
+  execute(input: ControllerExecutionInput): Action | null;
+  dispose?(): void;
+}
+
 export interface FighterStats {
   attacks: number;
   hits: number;
@@ -190,6 +201,18 @@ export interface MatchSummary {
     stocks: number;
   }>;
   events: MatchEvent[];
+}
+
+export interface EngineTickRecord {
+  tick: number;
+  time: number;
+  actions: Record<AgentId, Action>;
+  state: Readonly<WorldState>;
+}
+
+export interface EngineOptions {
+  runtime?: ControllerRuntime;
+  onTick?: (record: EngineTickRecord) => void;
 }
 
 export interface EngineSnapshot {
