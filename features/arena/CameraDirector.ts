@@ -15,8 +15,8 @@ export class CameraDirector {
   private mode: CameraMode = 'overview';
   private hold = 0;
   private shake = 0;
-  private readonly lookAt = new THREE.Vector3();
-  private readonly desired = new THREE.Vector3(14, 15, 18);
+  private readonly lookAt = new THREE.Vector3(0, 1.15, 0);
+  private readonly desired = new THREE.Vector3(13, 9.6, 17);
 
   constructor(private readonly camera: THREE.PerspectiveCamera, private readonly reducedMotion = false) {}
 
@@ -27,7 +27,7 @@ export class CameraDirector {
 
   impact(amount: number, mode: CameraMode = 'combat') {
     this.shake = Math.max(this.shake, this.reducedMotion ? amount * 0.12 : amount);
-    this.setMode(mode, this.reducedMotion ? 0.18 : mode === 'ko' ? 0.85 : 0.35);
+    this.setMode(mode, this.reducedMotion ? 0.18 : mode === 'ko' ? 0.92 : 0.42);
   }
 
   update({ fighterPositions, focusTarget, emphasisTarget, dt, time }: CameraInput) {
@@ -48,25 +48,37 @@ export class CameraDirector {
         ? emphasisTarget
         : center;
 
-    const orbit = this.reducedMotion ? 0 : time * 0.12;
-    const zoom = this.mode === 'ko' && !this.reducedMotion ? -3.8 : this.mode === 'combat' && !this.reducedMotion ? -2.1 : Math.min(4.8, spread * 0.4);
-    const height = this.mode === 'ko' && !this.reducedMotion ? 11.8 : this.mode === 'combat' && !this.reducedMotion ? 13.2 : 15 + Math.max(0, zoom) * 0.22;
-    const radiusX = 14 + zoom;
-    const radiusZ = 18 + zoom;
+    const orbit = this.reducedMotion ? 0.45 : 0.45 + Math.sin(time * 0.11) * 0.16;
+    const overviewDistance = 14.6 + Math.min(4.4, spread * 0.46);
+    const distance = this.mode === 'ko' && !this.reducedMotion
+      ? 9.1
+      : this.mode === 'combat' && !this.reducedMotion
+        ? 10.7
+        : this.mode === 'focus'
+          ? 9.7
+          : overviewDistance;
+    const height = this.mode === 'ko' && !this.reducedMotion
+      ? 6.2
+      : this.mode === 'combat' && !this.reducedMotion
+        ? 7.1
+        : this.mode === 'focus'
+          ? 6.9
+          : 9.2 + Math.min(1.5, spread * 0.12);
 
     this.desired.set(
-      target.x * 0.34 + radiusX + Math.sin(orbit) * (this.reducedMotion ? 0 : 1.25),
+      target.x * 0.52 + Math.cos(orbit) * distance,
       height,
-      target.z * 0.34 + radiusZ + Math.cos(orbit) * (this.reducedMotion ? 0 : 1.25),
+      target.z * 0.52 + Math.sin(orbit) * distance,
     );
 
-    const positionLerp = 1 - Math.pow(this.reducedMotion ? 0.08 : this.mode === 'ko' ? 0.003 : 0.02, dt);
+    const positionLerp = 1 - Math.pow(this.reducedMotion ? 0.08 : this.mode === 'ko' ? 0.0025 : 0.018, dt);
     this.camera.position.lerp(this.desired, positionLerp);
-    this.lookAt.lerp(new THREE.Vector3(target.x * 0.48, this.mode === 'ko' ? 0.85 : 0.48, target.z * 0.48), 1 - Math.pow(this.reducedMotion ? 0.08 : 0.01, dt));
+    const lookY = this.mode === 'ko' ? 1.55 : this.mode === 'combat' || this.mode === 'focus' ? 1.25 : 1.05;
+    this.lookAt.lerp(new THREE.Vector3(target.x * 0.72, lookY, target.z * 0.72), 1 - Math.pow(this.reducedMotion ? 0.08 : 0.012, dt));
 
     if (this.shake > 0.001) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake;
-      this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.45;
+      this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.42;
       this.camera.position.z += (Math.random() - 0.5) * this.shake;
       this.shake *= Math.pow(0.04, dt);
     }
