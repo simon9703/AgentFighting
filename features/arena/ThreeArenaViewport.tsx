@@ -6,7 +6,7 @@ import type { ArenaViewModel } from '@/features/renderers/types';
 import { ArenaFx } from './ArenaFx';
 import { ArenaPostFX } from './ArenaPostFX';
 import { CameraDirector } from './CameraDirector';
-import { createFighterRig, triggerFighterRig, updateFighterRig, type FighterRig } from './FighterRig';
+import { createFighterRig, setFighterRigWeapon, triggerFighterRig, updateFighterRig, type FighterRig } from './FighterRig';
 
 type Props = { view: ArenaViewModel; selectedFighterId?: string; quality?: 'low' | 'high' };
 
@@ -256,6 +256,7 @@ export default function ThreeArenaViewport({ view, selectedFighterId, quality = 
         visual.velocity.set(fighter.velocityX, 0, fighter.velocityZ);
         visual.root.visible = !fighter.eliminated;
         visual.root.scale.setScalar(fighter.respawning ? 0.72 : selectedRef.current === fighter.id ? 1.08 : 1);
+        setFighterRigWeapon(visual, fighter.weapon);
         visual.intentRing.visible = Boolean(fighter.intent) || selectedRef.current === fighter.id;
         (visual.intentRing.material as THREE.MeshBasicMaterial).opacity = selectedRef.current === fighter.id
           ? 0.94
