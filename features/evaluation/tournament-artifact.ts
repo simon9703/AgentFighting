@@ -64,10 +64,12 @@ function assertFighter(value: unknown, path: string) {
   assertString(value.intent, `${path}.intent`);
   if (value.weapon !== undefined) assertString(value.weapon, `${path}.weapon`);
   if (!isObject(value.cooldowns)) throw new Error(`${path}.cooldowns must be an object`);
-  ['attack','heavyAttack','dodge'].forEach((key) => assertFiniteNumber(value.cooldowns![key], `${path}.cooldowns.${key}`));
+  const cooldowns = value.cooldowns;
+  ['attack','heavyAttack','dodge'].forEach((key) => assertFiniteNumber(cooldowns[key], `${path}.cooldowns.${key}`));
   if (!isObject(value.stats)) throw new Error(`${path}.stats must be an object`);
+  const stats = value.stats;
   ['attacks','hits','heavyAttacks','dodges','damageDealt','damageTaken','kos','stocksLost','weaponsPicked','weaponsUsed','distanceTravelled','timeNearEdge','timeInCenter']
-    .forEach((key) => assertFiniteNumber(value.stats![key], `${path}.stats.${key}`));
+    .forEach((key) => assertFiniteNumber(stats[key], `${path}.stats.${key}`));
 }
 
 function assertWeapon(value: unknown, path: string) {
@@ -86,9 +88,10 @@ function assertWorldState(value: unknown, path: string) {
   assertString(value.phase, `${path}.phase`);
   ['tick','time','timeLeft','arenaRadius'].forEach((key) => assertFiniteNumber(value[key], `${path}.${key}`));
   if (!isObject(value.chaos)) throw new Error(`${path}.chaos must be an object`);
-  assertString(value.chaos.type, `${path}.chaos.type`);
-  assertFiniteNumber(value.chaos.until, `${path}.chaos.until`);
-  assertVec2(value.chaos.wind, `${path}.chaos.wind`);
+  const chaos = value.chaos;
+  assertString(chaos.type, `${path}.chaos.type`);
+  assertFiniteNumber(chaos.until, `${path}.chaos.until`);
+  assertVec2(chaos.wind, `${path}.chaos.wind`);
   if (!Array.isArray(value.fighters) || value.fighters.length < 2) throw new Error(`${path}.fighters must contain at least two fighters`);
   value.fighters.forEach((fighter, index) => assertFighter(fighter, `${path}.fighters[${index}]`));
   if (!Array.isArray(value.weapons)) throw new Error(`${path}.weapons must be an array`);
@@ -114,12 +117,14 @@ function assertArenaConfig(value: unknown, path: string) {
   if (!isObject(value)) throw new Error(`${path} must be an object`);
   ['seed','durationSeconds','tickRate','startRadius','outMargin','stocksPerAgent','respawnSeconds'].forEach((key) => assertFiniteNumber(value[key], `${path}.${key}`));
   if (!isObject(value.chaos)) throw new Error(`${path}.chaos must be an object`);
-  if (typeof value.chaos.enabled !== 'boolean') throw new Error(`${path}.chaos.enabled must be boolean`);
-  ['firstAtSeconds','intervalMinSeconds','intervalMaxSeconds','durationSeconds'].forEach((key) => assertFiniteNumber(value.chaos![key], `${path}.chaos.${key}`));
+  const chaos = value.chaos;
+  if (typeof chaos.enabled !== 'boolean') throw new Error(`${path}.chaos.enabled must be boolean`);
+  ['firstAtSeconds','intervalMinSeconds','intervalMaxSeconds','durationSeconds'].forEach((key) => assertFiniteNumber(chaos[key], `${path}.chaos.${key}`));
   if (!isObject(value.weapons)) throw new Error(`${path}.weapons must be an object`);
-  if (typeof value.weapons.enabled !== 'boolean') throw new Error(`${path}.weapons.enabled must be boolean`);
-  assertFiniteNumber(value.weapons.respawnSeconds, `${path}.weapons.respawnSeconds`);
-  if (!Array.isArray(value.weapons.types) || value.weapons.types.some((item) => typeof item !== 'string')) throw new Error(`${path}.weapons.types must be a string array`);
+  const weapons = value.weapons;
+  if (typeof weapons.enabled !== 'boolean') throw new Error(`${path}.weapons.enabled must be boolean`);
+  assertFiniteNumber(weapons.respawnSeconds, `${path}.weapons.respawnSeconds`);
+  if (!Array.isArray(weapons.types) || weapons.types.some((item) => typeof item !== 'string')) throw new Error(`${path}.weapons.types must be a string array`);
 }
 
 function assertReplayRecord(value: unknown, index: number): asserts value is MatchRecord {
