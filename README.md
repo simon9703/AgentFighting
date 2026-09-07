@@ -1,122 +1,134 @@
 # AgentFighting
 
-AgentFighting is a renderer-agnostic AI behavior arena with a **Three.js spectator presentation**. Multiple models generate one controller each, those controllers are locked before evaluation, and the same fixed code reacts to a changing shared world every simulation tick.
+AgentFighting is a renderer-agnostic AI behavior arena with a **Three.js spectator presentation**. Multiple models generate one fixed controller each, those exact submissions are validated and locked before evaluation, and every controller reacts to the same changing authoritative world.
 
-The project is not intended to be a serious model benchmark. Its value is in making agent behavior observable: strategy, mistakes, risk-taking, recovery, weapon choice, targeting, survival and emergent interaction.
+It is not intended to be a serious model benchmark. Its value is making autonomous behavior observable and replayable: strategy, mistakes, risk-taking, recovery, targeting, weapon choice, survival, runtime reliability and emergent interaction.
 
-## What exists today
-
-AgentFighting already supports the full local evaluation loop:
+## Product loop
 
 ```text
-Controller submissions
+/edit controller submissions at /submit
         ↓
-validate source + manifest
+Zod schema + source-policy validation
         ↓
-create stable source/controller identities
+sourceHash / controllerId / ControllerLock
         ↓
-ControllerLock
+Tournament Worker
         ↓
-run many deterministic seeded matches
+1 isolated Controller Worker per agent
         ↓
-authoritative WorldState + events + stats
+engine.prepareTick()
         ↓
-MatchRecord / replay / highlights
+same immutable observations → concurrent actions
         ↓
-Behavior Fingerprint
+engine.resolvePreparedTick(all accepted actions)
         ↓
-Tournament artifact + Markdown report
+MatchRecord + behavior aggregate
+        ↓
+portable TournamentArtifact
+        ↓
+IndexedDB / JSON export-import
+        ↓
+Three.js replay + highlights + fighter focus
 ```
 
-The web app exposes two main product surfaces:
+The trusted built-in path and the Worker-backed external path share the **same authoritative engine resolution**; there is no second browser-game simulation.
 
-- `/` — live authoritative arena viewer with a Three.js game-style presentation
-- `/tournament` — seeded tournament lab, behavior fingerprints, replay scrubbing, highlights and export
+## Web surfaces
 
-## Visual direction
+- `/` — live authoritative arena with adaptive Three.js rendering, camera direction, FX and optional event-driven SFX
+- `/submit` — controller editor, validation/identity inspection, exact-submission lock, seed presets/ranges, Worker tournament progress and runtime diagnostics
+- `/tournament` — aggregate behavior fingerprints, artifact import/export/persistence and authoritative Three.js replay
 
-The default live renderer now uses **Three.js** rather than a DOM/CSS pseudo-arena.
+## Three.js presentation
 
-Current presentation features include:
+The default visual implementation is Three.js, inspired by polished browser arcade presentation rather than dashboard UI.
 
-- low-poly 3D fighters and arena geometry
-- lighting, shadows and fog
-- dynamic spectator camera
-- camera shake for significant combat events
-- 3D weapon pickups
-- movement trails
-- hit / weapon / stock-loss / elimination particles
-- agent intent rings
-- chaos-reactive arena lighting
-- React HUD layered independently over WebGL
+Current presentation includes:
 
-The visual target is a polished browser arcade/spectator experience: the 3D scene is the main product surface, while tactical data and evaluation evidence remain available in the HUD.
+- low-poly 3D fighters, weapons and arena geometry
+- lighting, fog and quality-dependent shadows
+- movement trails, particles, attack/heavy arcs, dodge and shield effects
+- weapon tracer/target-link feedback
+- `CameraDirector` overview/combat/KO/fighter-focus modes
+- `ArenaPostFX` bloom, vignette, hit flash and restrained distortion
+- chaos-reactive environment treatment
+- short public controller `intent` and movement-direction visualization
+- shared live/replay `ThreeArenaViewport`
+- responsive React HUD over WebGL
+- automatic conservative quality selection on narrow/low-resource/reduced-motion clients
+- optional procedural SFX driven only by public match events
 
-Three.js does **not** own simulation truth. It only consumes renderer-friendly immutable data derived from the engine.
+Three.js, camera, particles, post-processing and audio never decide damage, collision, stocks, weapons, chaos or winner state.
 
 ## Architecture
 
 ```text
 agents/
-  built-in reference agents
-  canonical sample submissions
+  reference agents + sample submissions
 
 features/controllers/
-  generation prompt
-  submission schema
-  source validation
-  stable controller/source identity
+  submission/strategy schema
+  source policy
+  stable source/controller identity
   trusted local compiler
 
 features/sandbox/
-  controller runtime boundary
-  in-process runtime for trusted code
-  async same-tick action collection
-  browser Worker runtime for external code
+  runtime interfaces
+  same-tick async action collection
+  browser Controller Worker runtime
 
 features/engine/
   authoritative simulation
-  observations and action sanitization
+  prepareTick / resolvePreparedTick
+  observation + action sanitization
   movement / combat / weapons / stocks / chaos
   deterministic RNG
-  match summary and tournament aggregation
+  summary + tournament aggregation
 
 features/replay/
-  MatchRecord schema
-  per-tick actions and snapshots
-  deterministic replay verification
-  highlight timeline
+  MatchRecord
+  accepted per-tick actions + snapshots
+  deterministic verification
+  highlights
 
 features/evaluation/
   ControllerLock
-  submission tournament pipeline
-  portable TournamentArtifact
-  Markdown report generation
+  trusted evaluation
+  Worker-backed browser evaluation
+  dedicated Tournament Worker client
+  TournamentArtifact import/export
+  IndexedDB artifact storage
+  reports + runtime diagnostics
 
 features/renderers/
   passive renderer-facing adapters/view models
 
 features/arena/
-  Three.js live viewport
-  presentation-only particle/effect system
-  React spectator HUD
+  Three.js viewport
+  ArenaFx / ArenaPostFX / CameraDirector / ArenaAudio
+  live spectator HUD
+
+features/submission/
+  Submission Workspace
 
 features/tournament/
-  Tournament Lab product UI
+  Tournament Lab + Three.js replay
 ```
 
-The dependency direction is deliberate: **presentation never owns match truth**.
+Dependency direction is deliberate: **presentation and controller runtimes never own match truth**.
 
 ## Core invariants
 
-- every active controller observes the same pre-action snapshot for a tick
-- all actions are collected before authoritative resolution
-- controller outputs are sanitized
+- every active controller observes the same prepared tick snapshot
+- all controller actions are collected before authoritative resolution
+- every output is sanitized before engine use
 - engine randomness comes only from seeded RNG
-- renderers cannot mutate combat, stocks, chaos or winner state
-- a controller exception or timeout must not crash the match
-- externally supplied controller code must not be treated as trusted local code
-- controller identity is locked before seeded evaluation begins
+- renderers/audio cannot mutate match state
+- one controller timeout/crash cannot crash the match
+- external source never silently routes through the trusted local compiler
+- exact controller identity is locked before seeded evaluation
+- replay/artifact evidence records accepted authoritative actions/state, not renderer animation
 
 ## Controller contract
 
@@ -126,40 +138,43 @@ interface AgentController {
 }
 ```
 
-Controllers may keep private memory in their closure, but they do not call an LLM again during the match.
+Controllers may keep private memory inside their runtime for one match. They do not call an LLM again during combat. `intent` is a short public/debug label, never hidden chain-of-thought.
 
-A model submission includes:
+## External browser evaluation
 
-- `agentId`
-- model name
-- strategy manifest
-- self-contained JavaScript controller source
+The asynchronous authoritative tick flow is:
 
-The source receives stable hashes/identities so a replay can identify exactly which controller participated.
+```text
+prepareTick()
+    ↓
+Observation N for A/B/C/D
+    ↓
+Controller Workers execute concurrently with deadline
+    ↓
+timeout/error → neutral sanitized fallback
+    ↓
+resolvePreparedTick(actions)
+    ↓
+state N+1
+```
 
-## Evaluation and replay
+A dedicated Tournament Worker runs multi-seed evaluation away from the React UI thread. The Submission Workspace supports comma-separated seeds, ranges such as `1-50`, presets up to 100 seeds, cancellation, progress, partial aggregates, timeout/failure counts and decision-latency diagnostics.
 
-`evaluateControllerSubmissions()` is the trusted local end-to-end evaluation entry point. It validates submissions, creates a `ControllerLock`, runs the same participant set across many seeds, aggregates behavior fingerprints, and produces independently replayable `MatchRecord`s.
+Browser Workers provide fault isolation only. They are **not** a hardened hostile multi-tenant security sandbox. See [`docs/SANDBOX.md`](./docs/SANDBOX.md) for the production process/container/microVM design and deployment gate.
 
-A portable tournament artifact contains:
+## Evidence and replay
+
+A portable `TournamentArtifact` contains:
 
 - schema version
-- controller lock and hashes
-- original submissions and manifests
-- tournament seeds/config
+- exact ControllerLock and hashes
+- original submissions/manifests
+- seeds/config
 - match summaries
 - behavior fingerprints
-- replay records
+- authoritative replay records
 
-Replay is simulation data, not recorded video. Live and replay presentation can therefore share the same Three.js primitives without changing engine behavior.
-
-## Runtime safety
-
-`compileTrustedControllerSource()` uses `new Function` only for trusted local development. It is **not a sandbox**.
-
-For external controller code, the project has a browser Worker runtime and an asynchronous same-tick collection protocol with startup/per-tick timeout handling and neutral fallback actions. This is suitable for browser isolation and architecture validation, but it is not a hardened hostile multi-tenant sandbox.
-
-A production public submission service still needs process/container isolation, hard resource quotas and server-side admission controls.
+Tournament Lab can export JSON, import/validate it in a fresh session, persist it in IndexedDB, reopen recent evidence and inspect it using the same Three.js presentation without rerunning controllers.
 
 ## Current game rules
 
@@ -169,10 +184,10 @@ The initial environment is a Smash/Fall-Guys-like arena:
 - stock-based survival
 - movement, dodge, normal attack and heavy attack
 - hammer, shield, push gun and bomb
-- ice, wind, low gravity and shrinking arena events
+- ice, wind, low gravity and shrinking-arena events
 - body collisions and knockback
 
-The environment should continuously create trade-offs rather than one globally dominant strategy.
+Mechanics should create recurring trade-offs rather than one globally dominant policy.
 
 ## Run
 
@@ -184,6 +199,7 @@ pnpm dev
 Open:
 
 - `http://localhost:3000/`
+- `http://localhost:3000/submit`
 - `http://localhost:3000/tournament`
 
 ## Verify
@@ -192,12 +208,12 @@ Open:
 pnpm check
 ```
 
-This runs both TypeScript checking and the production Next.js build.
+This runs TypeScript checking and a production Next.js build.
 
 ## Project status
 
-The v1 authoritative engine/evaluation architecture is considered stable enough to freeze. New work should not add duplicate game rules or another evaluation path.
+The authoritative engine/evaluation boundary and Three.js presentation foundation are established. Submission editing, browser Worker evaluation, Tournament Worker orchestration, artifact persistence/import and live/replay presentation are implemented.
 
-Current focus is **Three.js Presentation Phase 2**, followed by the submission/Worker/artifact path. See [`docs/PLAN.md`](./docs/PLAN.md) and [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+Current work is **hardening**, not another rewrite: browser load benchmarking, deeper artifact validation/storage management, accessibility/audio polish, strategic arena experiments and eventually a hardened server sandbox before public hostile arbitrary-code execution.
 
-For architectural constraints and agent-facing development rules, see [`agent.md`](./agent.md) and [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+See [`docs/PLAN.md`](./docs/PLAN.md), [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md), [`docs/SANDBOX.md`](./docs/SANDBOX.md) and [`agent.md`](./agent.md).
