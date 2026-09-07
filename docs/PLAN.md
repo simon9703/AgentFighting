@@ -158,11 +158,15 @@ Delivered:
 - world-space fighter labels
 - fighter name / damage / intent labels
 - fighter interpolation
-- authoritative velocity orientation
 - selection focus state
 - chaos-reactive lighting
 - adaptive high/low quality profiles
 - reduced-motion support
+- DPR-safe canvas sizing so the complete arena fills the viewport instead of rendering only a cropped quadrant
+- stabilized broadcast framing instead of constant ambient orbiting
+- damped fighter facing to remove velocity-driven left/right jitter
+- stronger fighter material contrast, silhouette and emissive accents
+- brighter arena/fighter separation for clearer team-color readability
 
 ### Presentation FX
 
@@ -186,8 +190,8 @@ Delivered:
   - combat
   - KO
   - selected-fighter focus
-  - lower spectator/broadcast framing
-  - shake/emphasis
+  - spectator/broadcast framing
+  - restrained impact shake instead of continuous visual instability
 - `ArenaPostFX`
   - bloom
   - vignette
@@ -197,27 +201,28 @@ Delivered:
 
 ## Completed foundation — Fighter presentation rig
 
-New renderer-only `FighterRig` layer is now separated from `ThreeArenaViewport`.
+The renderer-only `FighterRig` layer is separated from `ThreeArenaViewport`.
 
 Current rig behavior:
 
 ```text
-authoritative velocity
-→ stride cycle
+authoritative movement
+→ visible stride cycle
+→ alternating leg motion
 → arm counter-swing
-→ body lean
-→ body bob
+→ body lean / body bob
+→ damped facing
 
 authoritative intent/event
-→ attack pose
-→ heavy pose
+→ attack wind-up / strike / recovery pose
+→ heavier two-stage attack pose
 → dodge pose
 → hit recoil
 → KO lean
 → respawn pulse
 ```
 
-Held weapons are now rendered from authoritative `fighter.weapon` state:
+Held weapons are rendered from authoritative `fighter.weapon` state:
 
 - hammer
 - shield
@@ -226,17 +231,50 @@ Held weapons are now rendered from authoritative `fighter.weapon` state:
 
 No rig animation affects engine motion, collision, hit resolution, damage or stocks.
 
-## Current focus — Combat presentation phase
+## Current focus — Combat locomotion and action readability
 
-This is now the highest-priority product work because the architecture/evaluation foundation is already strong enough and the largest visible gap is fight readability.
+This is the highest-priority product work. The main remaining gap is no longer basic rendering; it is making authoritative AI decisions visually read as an actual fight.
 
-### A. Fighter action state machine
-
-Upgrade the current continuous pose reactions into explicit presentation phases:
+The target presentation pipeline is:
 
 ```text
 idle
+  ↓
+walk / run / strafe
+  ↓
+approach target
+  ↓
+attack.windup
+  ↓
+attack.active
+  ↓
+attack.recovery
+  ↓
+resume locomotion / reposition
+```
+
+Interrupted branches:
+
+```text
+dodge
+hit → knockback
+stock-lost → launch / fall
+eliminated → KO / removal
+respawn → re-entry / landing
+```
+
+### A. Explicit fighter presentation state machine
+
+Replace loosely coupled continuous pose reactions with an explicit renderer-only state machine.
+
+Required states:
+
+```text
+idle
+walk
 run
+strafe
+approach
 attack.windup
 attack.active
 attack.recovery
@@ -245,33 +283,63 @@ heavy.active
 heavy.recovery
 dodge
 hit
+knockback
 ko
 respawn
 ```
 
 Goals:
 
-- attacks should visually read as discrete actions instead of short arm offsets
-- heavy attacks need clear charge → release → recovery
-- dodge needs clear directional burst/posture
-- hit reaction should have readable recoil
-- KO should visually communicate launch/rotation/removal
-- respawn should have a clear landing/re-entry moment
+- locomotion must be visibly distinct from standing idle
+- fighters should approach opponents without appearing to slide
+- low-speed direction noise must not rotate the whole body every frame
+- facing should prefer meaningful movement/attack targets rather than raw instantaneous velocity
+- attacks must visually read as discrete actions
+- attack wind-up must clearly raise/prepare the striking arm or weapon
+- attack active frames must produce a readable forward strike
+- recovery must return naturally to locomotion rather than snapping to idle
+- heavy attacks need clear charge → release → follow-through → recovery
+- dodge needs directional posture and burst movement presentation
+- hit reaction should include directional recoil
+- KO should communicate launch/fall/removal
+- respawn should include a readable re-entry/landing moment
 
-This remains renderer-only; authoritative action timing continues to come from engine snapshots/events.
+All timing remains derived from authoritative snapshots/events. The renderer never decides whether an attack lands.
 
-### B. Weapon-specific animation
+### B. Target-aware facing and movement presentation
+
+Introduce a stable facing policy separate from raw motion interpolation.
+
+Priority:
+
+```text
+active attack target
+→ recent combat target
+→ meaningful movement direction
+→ retain previous facing
+```
+
+Implementation goals:
+
+- angular damping with shortest-angle interpolation
+- dead zone for tiny velocity changes
+- minimum facing hold time during attack phases
+- no 180° flip-flop from per-tick steering noise
+- walk/run animation speed based on rendered displacement, not noisy raw velocity alone
+- optional side-step/strafe pose when motion direction differs strongly from facing
+
+### C. Weapon-specific animation
 
 Implement distinct held-weapon presentation:
 
-- hammer: large two-stage swing / heavy follow-through
-- shield: raise/brace forward
-- push gun: raise, fire and recoil
-- bomb: lift, throw arc and release FX
+- hammer: raise → large swing → heavy follow-through
+- shield: raise / brace / absorb pose
+- push gun: aim → fire → recoil
+- bomb: lift → throw → release arc / FX
 
-Weapon use visuals should consume existing authoritative weapon state/events. Do not add renderer-owned weapon rules.
+Weapon use visuals consume existing authoritative weapon state/events. Do not add renderer-owned weapon rules.
 
-### C. Event reaction layer
+### D. Event reaction layer
 
 Keep per-fighter transient presentation reactions:
 
@@ -281,6 +349,7 @@ Map<fighterId, {
   heavy,
   dodge,
   hit,
+  knockback,
   ko,
   respawn
 }>
@@ -289,42 +358,94 @@ Map<fighterId, {
 Next improvements:
 
 - derive hit recoil direction from actor/target positions
-- distinguish stock-loss vs final elimination
+- distinguish normal hit, stock loss and final elimination
 - emphasize successful heavy hits
 - distinguish weapon-use reactions by weapon type
-- avoid replay divergence by deriving all triggers from recorded public events/state
+- add short hit-stop / impact emphasis in presentation only
+- avoid replay divergence by deriving every trigger from recorded public events/state
 
-### D. Camera choreography
+### E. Combat-pair camera choreography
 
-After action phases are readable:
+Only after locomotion/action phases are stable:
 
-- pair framing for nearby combatants
+- frame nearby attacker + target together
+- maintain enough arena context to understand positioning
 - brief heavy-hit push-in
 - weapon-use emphasis
-- KO tracking without losing arena context
+- KO tracking without losing surviving fighters
 - highlight replay camera presets
-- reduced-camera-shake user toggle independent of OS preference
+- selected fighter follow mode
+- reduced-camera-shake toggle independent of OS preference
 
-### E. Arena readability
+Camera movement must never obscure action readability for decorative effect.
+
+### F. Fighter visual redesign pass
+
+The current procedural mech is now usable but remains a placeholder presentation asset.
+
+Near-term procedural improvements:
+
+- stronger head/body/limb silhouette separation
+- larger readable hands/forearms for attack poses
+- more obvious front/back orientation
+- brighter team-color accents with dark neutral armor base
+- opaque materials by default; transparency reserved for FX only
+- clearer selected-fighter outline/ring
+- simpler labels while fighters are in close combat
+
+Later asset upgrade:
+
+- support GLTF/GLB rigged fighter models behind the same renderer contract
+- map presentation states onto `AnimationMixer` clips
+- retain procedural fallback for low quality/mobile mode
+- never couple asset skeletons to engine rules
+
+### G. Arena and theme readability
 
 Improve the world only where it helps strategy and viewing:
 
+- lighter midtones so dark fighters do not disappear into the arena
+- one dominant cool neutral environment palette
+- team/fighter colors reserved primarily for characters, labels and combat FX
 - clearer arena boundary/death edge
 - clearer cover readability
 - better weapon spawn readability
 - restrained chaos environment animation
 - reusable arena-theme primitives
 
-Do not add decorative geometry that hides fighters or confuses authoritative collision boundaries.
+Do not add decorative geometry, bloom or transparency that hides fighters or confuses authoritative collision boundaries.
+
+## Next — Multiplayer readability pass
+
+After 1v1/low-count combat reads correctly, validate 4–8 fighter chaos scenarios.
+
+Goals:
+
+- no overlapping world labels covering combat
+- selected fighter remains identifiable at all times
+- attacks from different fighters can be visually separated
+- local combat clusters are readable without zooming the camera into only one corner
+- KO/weapon effects do not flood the whole screen
+- arena framing remains complete at desktop and mobile aspect ratios
+
+Potential techniques:
+
+- distance-aware label scale/visibility
+- priority labels for selected/recently-hit fighters
+- capped simultaneous transient FX
+- combat-cluster camera target with arena-bound constraints
+- per-fighter color accents plus neutral body materials
 
 ## Next — Code organization cleanup
 
-`ThreeArenaViewport.tsx` is still too large. After fighter/weapon action work stabilizes, extract:
+`ThreeArenaViewport.tsx` is still too large. Once the locomotion/action behavior stabilizes, extract:
 
 ```text
 ThreeArenaViewport
 ├─ ArenaEnvironment.ts
+├─ FighterPresentationState.ts
 ├─ FighterRig.ts
+├─ FighterFacing.ts
 ├─ WeaponVisual.ts
 ├─ ArenaLabels.ts
 ├─ ArenaFx.ts
@@ -336,7 +457,9 @@ Goals:
 
 - viewport orchestrates only lifecycle + authoritative synchronization
 - environment owns static/decorative world geometry
-- rig owns fighter presentation
+- presentation state owns renderer-only action phase transitions
+- rig owns fighter mesh/skeleton posing
+- facing owns target-aware angular smoothing
 - weapon module owns pickup + held weapon model creation
 - labels own CanvasTexture/Sprite lifecycle
 - no combat rules move into presentation modules
@@ -411,22 +534,46 @@ Browser Workers remain a browser fault-isolation layer only.
 ✓ CameraDirector + ArenaPostFX + ArenaFx + SFX
 ✓ FighterRig foundation
 ✓ authoritative held-weapon visuals
+✓ DPR/canvas crop fix
+✓ stable overview camera baseline
+✓ higher-contrast fighter/theme pass
+✓ damped facing + visible walk/attack pose baseline
 ✓ dependency cleanup to plain Three.js
         ↓
 NOW
-1. discrete fighter action state machine
-2. weapon-specific attack/use animation
-3. directional hit / KO / respawn reactions
-4. combat-pair camera choreography
-5. arena readability polish
-6. split ThreeArenaViewport into presentation modules
+1. explicit locomotion/action presentation state machine
+2. target-aware facing + approach/strafe presentation
+3. weapon-specific attack/use animations
+4. directional hit / knockback / KO / respawn reactions
+5. combat-pair camera choreography
+6. fighter silhouette/theme readability refinement
+7. 4–8 fighter multiplayer readability validation
+8. split ThreeArenaViewport into presentation modules
         ↓
 NEXT
-7. 50–100 seed target-device benchmarking
-8. artifact storage-management/migrations
-9. strategic arena/mode experiments
-10. hardened server sandbox
+9. GLTF/AnimationMixer fighter asset path with procedural fallback
+10. 50–100 seed target-device benchmarking
+11. artifact storage-management/migrations
+12. strategic arena/mode experiments
+13. hardened server sandbox
 ```
+
+## Acceptance criteria for the current visual phase
+
+Before leaving the combat-presentation phase, the default arena should satisfy all of the following:
+
+- the full arena is visible at common desktop and mobile aspect ratios
+- fighters remain readable against the environment without relying on transparency
+- a moving fighter visibly walks/runs instead of sliding
+- a fighter does not continuously jitter or rotate from steering noise
+- normal and heavy attacks are distinguishable without reading the HUD
+- the striking arm/weapon visibly raises before the hit phase
+- hit direction and knockback are visually understandable
+- KO and respawn are visually distinct from ordinary damage
+- the camera does not hide 75% of the arena or constantly shake/orbit
+- selected fighter remains identifiable during multi-fighter combat
+- replay derives the same presentation triggers from recorded authoritative events
+- renderer-only states never change engine outcomes
 
 ## Product loop
 
@@ -457,7 +604,7 @@ Tournament Lab
         ↓
 shared Three.js replay
         ↓
-combat animation + camera + telemetry
+combat locomotion + action state + camera + telemetry
 ```
 
 The next phase should improve **fight readability, visible strategy differentiation and spectator quality** without weakening the authoritative engine boundary.
