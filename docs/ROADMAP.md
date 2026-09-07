@@ -61,64 +61,52 @@
 - ☑️ Live authoritative arena viewer
 - ☑️ Three.js default live renderer
 - ☑️ Low-poly 3D arena / fighters / lighting / shadows / fog
-- ☑️ Dynamic spectator camera and combat camera shake
-- ☑️ Presentation-only particle system (`ArenaFx`)
-- ☑️ Fast-movement trails
-- ☑️ Hit / weapon / stock-loss / elimination effects
+- ☑️ Presentation-only `ArenaFx`
+- ☑️ Movement trails and event bursts
+- ☑️ Attack arc / heavy attack readability
+- ☑️ Dodge burst and shield field
+- ☑️ Weapon tracer / target link
 - ☑️ 3D weapon pickups
-- ☑️ Agent intent visualization
-- ☑️ Chaos-reactive environment lighting
+- ☑️ Agent intent and movement-direction visualization
+- ☑️ Chaos-reactive environment treatment
+- ☑️ `CameraDirector`: overview / combat / KO / fighter focus
+- ☑️ `ArenaPostFX`: bloom / vignette / hit flash / restrained distortion
 - ☑️ Responsive game-style React HUD
+- ☑️ Live selected-fighter follow camera
 - ☑️ Tournament Lab
-- ☑️ Controller lock/source hash inspection
 - ☑️ Behavior fingerprint UI
-- ☑️ Replay scrubber
-- ☑️ Per-seed replay switching
-- ☑️ Highlight navigation
-- ☑️ Product navigation between live arena and tournament lab
-- ☐ Attack arc / heavy wind-up / dodge / shield readability
-- ☐ Shared spectator camera director
-- ☐ Post-processing stack and visual quality tiers
-- ☐ Three.js replay presentation parity
+- ☑️ Replay scrubber / seed switching / highlight navigation
+- ☑️ Three.js replay parity with live presentation
+- ☑️ Replay play/pause and 0.5×–4× speed
+- ☑️ Replay selected-fighter camera focus
+- ☐ Automatic mobile visual quality selection
+- ☐ Audio/SFX spectator layer
 - ☐ Real submission editor/import UI
 - ☐ Validation/policy violation UI
 - ☐ Artifact import/replay viewer
 
 ## v1 completion status
 
-The local/reference product loop is complete:
-
-```text
-sample submissions
-→ validate
-→ identify + lock
-→ seeded tournament
-→ authoritative records
-→ behavior fingerprints
-→ replay/highlights
-→ artifact/report export
-```
-
-The v1 engine/evaluation architecture is treated as **frozen**. New work extends existing contracts instead of creating parallel game/evaluation systems.
+The local/reference product loop is complete and the authoritative engine/evaluation architecture is treated as frozen. New work extends existing contracts instead of creating parallel game/evaluation systems.
 
 ## v2 — Submission Platform, Scalable Evaluation and Spectator Presentation
 
-The product now has two equally important surfaces:
+The product has two first-class surfaces:
 
-1. a trustworthy controller experimentation/evaluation pipeline
-2. a spectator-grade visualization that makes autonomous behavior understandable
+1. trustworthy controller experimentation/evaluation
+2. spectator-grade visualization of autonomous behavior
 
-Three.js is the default live presentation implementation, but it is not part of the authoritative engine contract.
+Three.js is the default presentation implementation, not an engine dependency.
 
-Priority order:
+### Current priority
 
-1. Finish current Three.js Presentation Phase 2
-2. Controller Submission Workspace
+1. ☑️ Three.js Presentation Phase 2
+2. **Controller Submission Workspace — current focus**
 3. Worker-backed external execution end to end
 4. Tournament Worker and progress streaming
-5. Artifact import/persistence + Three.js replay parity
+5. Artifact import/persistence
 6. Production sandbox architecture
-7. Shared camera/post-FX/spectator polish
-8. New arenas/game modes only after the platform path is stable
+7. Spectator extensions / audio / mobile quality
+8. New arenas/game modes after the platform path is stable
 
 Detailed milestones and acceptance criteria are maintained in [`PLAN.md`](./PLAN.md).
