@@ -1,5 +1,7 @@
 export { evaluateControllerSubmissions } from './submission-tournament';
 export { evaluateControllerSubmissionsInBrowser } from './browser-submission-tournament';
+export { runTournamentInWorker } from './tournament-worker-client';
+export type { TournamentWorkerResult, TournamentWorkerRun } from './tournament-worker-client';
 export { createControllerLock, parseControllerLock } from './controller-lock';
 export type { ControllerLock, LockedController } from './controller-lock';
 export {
