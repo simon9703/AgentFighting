@@ -7,6 +7,7 @@ import {
 import { runTournament, type ArenaConfig, type TournamentResult } from '@/features/engine';
 import { runRecordedMatch, type MatchRecord } from '@/features/replay';
 import { createControllerLock, type ControllerLock } from './controller-lock';
+import { createTournamentArtifact, type TournamentArtifact } from './tournament-artifact';
 
 const PALETTE = ['#9b8cff', '#52d273', '#52b8ff', '#65e0c3', '#ffd267', '#ff7db4', '#ff9d63', '#8fe2f2'];
 
@@ -23,6 +24,7 @@ export interface SubmissionTournamentResult {
   lock: ControllerLock;
   tournament: TournamentResult;
   records: MatchRecord[];
+  artifact: TournamentArtifact;
 }
 
 function buildAgents(
@@ -58,5 +60,6 @@ export function evaluateControllerSubmissions(input: EvaluateSubmissionsInput): 
     controllers,
     engineVersion: input.engineVersion,
   }));
-  return { agents, lock, tournament, records };
+  const artifact = createTournamentArtifact({ lock, submissions, tournament, records });
+  return { agents, lock, tournament, records, artifact };
 }

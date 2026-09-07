@@ -23,7 +23,8 @@
 - ☑️ Per-tick sanitized action recording
 - ☑️ Authoritative snapshots and event recording
 - ☑️ Action-only deterministic replay verification
-- ☐ Persist match artifacts as versioned JSON files
+- ☑️ Create a portable versioned tournament artifact (lock + submissions + records)
+- ☐ Persist tournament artifacts as versioned JSON files
 - ☐ Export a compact highlight timeline for any renderer
 
 ## Next: safe external controller execution
