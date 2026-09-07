@@ -40,8 +40,12 @@ export async function collectSameTickActions(
       const output = await timeout(runtime.execute(agentId, observation), perTickTimeoutMs);
       return [agentId, sanitizeAction(output)] as const;
     } catch (error) {
-      if (error instanceof Error && error.message === 'controller-timeout') timedOut.push(agentId);
-      else failed.push(agentId);
+      if (error instanceof Error && error.message === 'controller-timeout') {
+        timedOut.push(agentId);
+        await runtime.dispose?.();
+      } else {
+        failed.push(agentId);
+      }
       return [agentId, sanitizeAction(null)] as const;
     }
   }));
