@@ -16,47 +16,55 @@
 - ☑️ Local trusted compiler for development only
 - ☑️ Tournament evaluation across multiple seeds
 - ☑️ Behavior fingerprint aggregation
-- ☑️ ControllerLock: immutable participant identities before evaluation
+- ☑️ ControllerLock with stable lock hash before evaluation
 
 ## Replay and records
 
 - ☑️ Per-tick sanitized action recording
 - ☑️ Authoritative snapshots and event recording
 - ☑️ Action-only deterministic replay verification
-- ☑️ Create a portable versioned tournament artifact (lock + submissions + records)
-- ☐ Persist tournament artifacts as versioned JSON files
-- ☑️ Export a compact highlight timeline for any renderer
+- ☑️ Portable versioned tournament artifact (lock + submissions + records + summaries)
+- ☑️ Downloadable versioned JSON tournament artifact
+- ☑️ Compact highlight timeline for any renderer
 
-## Next: safe external controller execution
+## External controller execution boundary
 
-- ☐ Define an asynchronous runtime protocol without weakening same-tick fairness
-- ☐ Add a Worker/process runtime with startup, per-tick, and memory limits
-- ☐ Kill and replace a timed-out controller action with a safe fallback
-- ☐ Keep trusted local compilation separate from externally submitted source
+- ☑️ Async runtime protocol that preserves collect-before-resolve same-tick fairness
+- ☑️ Browser Worker runtime with startup isolation
+- ☑️ Per-tick timeout, Worker termination and safe neutral fallback
+- ☑️ Trusted local compilation kept separate from external runtime primitives
+- ☐ Add server process/container runtime with strict memory accounting for fully untrusted public submissions
 
-## Next: real agent tournament workflow
+## Real agent tournament workflow
 
-- ☐ Add example submissions generated from the canonical controller prompt
-- ☐ Store submission source, manifest, lock, config, records, and summaries together
-- ☐ Add a repeatable tournament command for a named controller set and seed range
-- ☐ Generate human-readable post-match reports without changing locked controllers
+- ☑️ Canonical example controller submissions with distinct strategy manifests
+- ☑️ Store submission source, manifest, lock, config, records, fingerprints and summaries together
+- ☑️ Interactive repeatable seeded tournament workflow in `/tournament`
+- ☑️ Human-readable post-match Markdown reports without changing locked controllers
+- ☐ Add CLI command for CI/headless named tournament sets
 
 ## Presentation
 
-- ☑️ Add a renderer-facing MatchSession that exposes only headless state
-- ☑️ Bind the primary product experience to authoritative MatchSession state only
-- ☑️ Add a responsive 2D/2.5D live arena inspector for strategy debugging
-- ☐ Add replay scrubbing and highlight navigation
-- ☐ Choose the final 2D / 2.5D / 3D viewing experience after engine validation
-- ☐ Add richer camera, impact, weapon and chaos visual polish without moving rules into presentation
+- ☑️ Renderer-facing MatchSession that exposes only headless state
+- ☑️ Primary live experience bound to authoritative MatchSession state only
+- ☑️ Responsive 2D/2.5D live arena inspector
+- ☑️ Replay scrubbing across every recorded authoritative tick
+- ☑️ Highlight navigation into replay ticks
+- ☑️ Behavior Fingerprint comparison UI
+- ☑️ Tournament artifact and report export UI
+- ☑️ 2.5D is the primary first-version presentation; renderer remains replaceable
+- ☐ Add richer impact, weapon and chaos animation without moving rules into presentation
 
-## Product completion gate
+## First-version product loop
 
-The first complete public loop is reached when a user can:
+The repository now demonstrates the complete local/reproducible loop:
 
-1. select or submit several generated controllers,
-2. lock controller identities and source hashes,
-3. run a reproducible seeded tournament,
-4. watch the authoritative arena without renderer-owned rules,
-5. inspect replay/highlights and behavior fingerprints,
-6. export the full tournament artifact and human-readable report.
+1. generated-style controller submissions declare source + strategy manifests,
+2. controller identities and source hashes are locked before evaluation,
+3. the same locked controllers run across a deterministic seed set,
+4. the live arena consumes authoritative engine state rather than renderer-owned rules,
+5. tournament results expose Behavior Fingerprints rather than only a winner,
+6. every recorded match can be scrubbed and navigated by highlights,
+7. the full JSON artifact and human-readable Markdown report can be exported.
+
+The remaining security milestone is deployment-grade execution of arbitrary untrusted public source with hard process/container memory limits. That is an infrastructure hardening step, not a dependency of the local product/architecture loop.
