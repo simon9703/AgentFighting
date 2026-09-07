@@ -6,79 +6,70 @@
 
 v1 proved the authoritative architecture and local tournament loop. v2 turns that loop into a usable controller experimentation platform while making behavior visibly understandable and entertaining to watch.
 
-The presentation goal is no longer a minimal dashboard. The default live renderer is now **Three.js**, inspired by polished browser arcade projects such as `turbo-kart-rush`: a strong 3D scene, readable HUD, camera language, particles and effects layered over authoritative simulation data.
+Three.js is now the default product presentation, while the engine, tournament pipeline and replay format remain renderer-agnostic.
 
-Three.js remains an implementation detail of presentation. The engine, tournament pipeline and replay format stay renderer-agnostic.
+## Presentation Phase 2 — Completed
 
-## Current focus — Presentation Phase 2
+The current visual upgrade is considered complete enough to move the primary focus back to the platform path.
 
-### Goal
+### Delivered
 
-Make the live arena immediately communicate movement, combat, weapons, chaos and agent intent without requiring the event log.
+- Three.js live arena replaces the old DOM/CSS pseudo-arena.
+- Low-poly fighters, weapons, arena geometry, lighting, shadows and fog.
+- Dedicated presentation-only `ArenaFx` system.
+- Fast movement trails and combat bursts.
+- Attack arcs from observable intent changes.
+- Heavy attack visual emphasis.
+- Dodge burst/trail.
+- Shield field effect.
+- Weapon-use beam/tracer and target link.
+- Bomb-specific visual emphasis from public weapon-use detail.
+- Hit / stock loss / elimination escalation.
+- `CameraDirector` with overview, combat, KO and selected-fighter focus modes.
+- Auto framing based on active fighter spread.
+- Live fighter follow mode from the contender cards.
+- `ArenaPostFX` with subtle bloom, vignette, hit flash and restrained energy/chromatic distortion.
+- Chaos-reactive arena color, light, exposure and post FX.
+- High/low quality renderer hooks.
+- Tactical direction line based on observable movement/facing data.
+- Controller short `intent` visualization without exposing chain-of-thought.
+- Tournament replay now reuses the same `ThreeArenaViewport` as live matches.
+- Replay play/pause, speed controls, scrubber, highlights and per-fighter camera focus.
 
-### Completed
+### Presentation architecture
 
-- Three.js live arena viewport replaces the old DOM/CSS pseudo-arena.
-- Low-poly fighter presentation with lighting, shadows, fog and arena geometry.
-- Dynamic spectator camera with framing based on fighter spread.
-- Camera shake for significant combat events.
-- Dedicated presentation-only `ArenaFx` particle system.
-- Movement trails for fast fighters.
-- Hit / weapon / stock-loss / elimination burst effects.
-- Weapon pickups rendered as animated 3D objects.
-- Agent intent rings derived from controller-provided short intent labels.
-- Chaos changes arena/rim lighting without modifying simulation rules.
-- React HUD remains separate from WebGL rendering.
+```text
+authoritative WorldState / replay snapshot
+        ↓
+createArenaViewModel()
+        ↓
+ThreeArenaViewport
+   ├─ scene / fighters / weapons
+   ├─ ArenaFx
+   ├─ CameraDirector
+   └─ ArenaPostFX
+        ↓
+WebGL
 
-### Next visual work
+React HUD / replay controls consume the same renderer-neutral data in parallel.
+```
 
-1. Attack readability
-   - anticipation flash
-   - attack arc / aim direction
-   - heavy-attack wind-up
-   - dodge burst
-   - shield field
-   - push-gun projectile/tracer
-   - bomb fuse/explosion staging
-2. Camera language
-   - overview / combat-focus modes
-   - short KO emphasis
-   - selected-fighter follow mode
-   - replay highlight camera presets
-3. Environment
-   - richer arena silhouettes
-   - ramps/platforms where engine rules support them
-   - animated hazard presentation
-   - chaos-specific environment treatment
-4. Post effects
-   - subtle bloom
-   - vignette
-   - hit flash
-   - restrained chromatic/energy distortion for major events
-5. AI behavior visualization
-   - target indicator
-   - recent intent changes
-   - short planned-direction vector from action/velocity data
-   - selected fighter tactical overlay
-   - no chain-of-thought display
+### Invariants
 
-### Acceptance criteria
+- particles, camera, interpolation and post FX are presentation only
+- no Three.js code decides damage, collision, stocks, weapon outcomes, chaos or winner state
+- replay and live presentation consume authoritative snapshots rather than separate game logic
+- controller `intent` is a short public/debug label, never hidden reasoning
 
-- a viewer can identify major combat events without reading raw logs
-- effects are derived only from immutable state/events/actions
-- no Three.js code determines damage, collision, stocks, weapons or winner state
-- visual intensity remains readable on mobile and does not obscure agents
-- the live and replay renderers can share the same presentation primitives
-
-## Milestone 1 — Controller Submission Workspace
+## Current focus — Milestone 1: Controller Submission Workspace
 
 ### Goal
 
-Let a user create or paste a complete `ControllerSubmission`, validate it before execution, and understand exactly what will be locked.
+Let a user create or paste complete `ControllerSubmission`s, validate them before execution, and understand exactly what will be locked.
 
 ### Work
 
-- Add `/submit` or a submission panel inside Tournament Lab.
+- Add `/submit` or a submission workspace inside Tournament Lab.
 - Editable fields: agent id, model label, strategy manifest and JavaScript source.
 - Parse through the canonical Zod schema.
 - Run source policy validation before execution.
@@ -94,7 +85,7 @@ Let a user create or paste a complete `ControllerSubmission`, validate it before
 - users can see why validation failed
 - the exact source being locked is visible
 - two identical sources generate stable identities
-- tournament participants are derived from submitted/locked data, not hidden defaults
+- tournament participants come from submitted/locked data, not hidden defaults
 
 ## Milestone 2 — Worker-backed External Execution
 
@@ -105,21 +96,21 @@ Make the browser tournament path execute user-supplied controller source through
 ### Work
 
 - Define a browser evaluation coordinator around the existing async runtime protocol.
-- Start one isolated worker/runtime per controller or a clearly documented equivalent isolation model.
+- Start one isolated worker/runtime per controller or a documented equivalent isolation model.
 - Build observations from one immutable tick state.
-- Dispatch all controller decisions concurrently.
+- Dispatch controller decisions concurrently.
 - Apply per-tick timeout/fallback rules.
 - Preserve authoritative resolution order in the engine.
 - Record timeout/failure diagnostics as non-authoritative runtime metadata.
-- Keep sample/trusted evaluation available for tests and local development.
+- Keep trusted sample evaluation available for tests/local development.
 
 ### Acceptance criteria
 
 - user source never executes through `compileTrustedControllerSource()`
 - one timed-out worker cannot stall the match
 - one failed worker cannot crash another participant
-- all controllers still decide from the same tick snapshot
-- replay records remain deterministic with the accepted actions
+- all controllers decide from the same tick snapshot
+- replay records remain deterministic with accepted actions
 
 ## Milestone 3 — Tournament Worker and Progress Streaming
 
@@ -132,16 +123,16 @@ Run long multi-seed tournaments without blocking the UI.
 - Move tournament orchestration into a dedicated Worker.
 - Support configurable seed lists/ranges.
 - Emit queued/running/partial/completed/failed/cancelled progress events.
-- Allow user cancellation.
+- Allow cancellation.
 - Update rankings/fingerprints incrementally where safe.
-- Avoid storing unnecessary duplicate state in the UI thread.
+- Avoid unnecessary duplicate state in the UI thread.
 
 ### Acceptance criteria
 
 - 50–100 seed runs do not freeze the page
 - progress is visible
 - cancellation terminates background work
-- final artifact is identical in schema to synchronous trusted evaluation
+- final artifact matches the synchronous trusted schema
 
 ## Milestone 4 — Artifact Import, Persistence and Replay UX
 
@@ -149,22 +140,30 @@ Run long multi-seed tournaments without blocking the UI.
 
 Make tournament evidence reusable after the page/session ends.
 
-### Work
+### Already completed
+
+- Three.js replay parity with the live renderer.
+- Replay play/pause.
+- Replay speed controls.
+- Highlight jump navigation.
+- Selected-fighter focus camera.
+- Seed switching and scrubber.
+
+### Remaining work
 
 - Add `TournamentArtifact` parser/validator.
 - Import JSON artifact from file.
 - Open imported artifacts directly in replay/tournament inspection mode.
-- Add local persistence using IndexedDB or a small storage adapter.
-- Define a storage interface that can later be backed by a server.
-- Improve replay controls: play/pause, speed, jump to event, highlight navigation, event filters and selected-fighter focus.
-- Reuse Three.js presentation primitives in replay mode rather than maintaining a visually separate replay system.
+- Add local persistence using IndexedDB or a storage adapter.
+- Define a storage interface that can later be server-backed.
+- Add event filters and richer replay metadata.
 
 ### Acceptance criteria
 
 - exported artifact can be imported into a fresh browser session
 - imported artifact produces the same rankings/replay data
-- replay can be navigated without rerunning controllers
-- live and replay views remain visually consistent
+- replay works without rerunning controllers
+- live and replay remain visually consistent
 
 ## Milestone 5 — Production Sandbox Architecture
 
@@ -187,44 +186,22 @@ Design the path for accepting hostile public submissions safely.
 - no public deployment claims `new Function` or browser Worker alone is a secure sandbox
 - resource limits and fallback semantics are explicit
 
-## Milestone 6 — Spectator and Replay Polish
+## Milestone 6 — Spectator Extensions
 
-### Goal
+The core spectator stack now exists. Future work here should be incremental rather than another renderer rewrite.
 
-Turn presentation primitives into a coherent spectator system rather than isolated effects.
+Possible additions:
 
-### Work
-
-```text
-authoritative state/events/actions
-        ↓
-renderer view model
-        ↓
-Three.js arena + ArenaFx + camera director
-        ↓
-React HUD / timeline / replay controls
-```
-
-Add:
-
-- shared camera director
-- shared event-to-effect mapping
-- replay highlight shots
-- selected fighter focus
-- intent readability
-- event feed hierarchy
-- match-end presentation
-- mobile visual quality tiers
-
-### Acceptance criteria
-
-- renderer effects are deterministic enough for debugging but never authoritative
-- major events have consistent visual language across live/replay
-- presentation modules are reusable instead of accumulating logic in one component
+- replay cinematic presets for specific highlight categories
+- richer chaos-specific environment animation
+- mobile automatic quality selection
+- audio/SFX layer
+- accessibility modes for effects and camera shake
+- arena themes that reuse the same renderer contracts
 
 ## Milestone 7 — New Modes and Arenas
 
-Only begin after submission + Worker + artifact/replay foundations are stable.
+Only begin after submission + Worker + artifact foundations are stable.
 
 Possible work:
 
@@ -233,7 +210,6 @@ Possible work:
 - objective/control-point mode
 - hazards with meaningful strategic trade-offs
 - multiple Three.js arena themes
-- optional alternate renderer experiments
 
 Any new mode should first prove that it creates meaningful controller trade-offs.
 
@@ -253,18 +229,17 @@ Do not prioritize:
 ## Recommended implementation order
 
 ```text
-NOW: Three.js Presentation Phase 2
-  ↓
-1. Submission Workspace
+✓ Three.js Presentation Phase 2
+        ↓
+NOW: Controller Submission Workspace
+        ↓
 2. External Worker evaluation path
-3. Tournament Worker
-4. Artifact import + Three.js replay
+3. Tournament Worker + progress streaming
+4. Artifact import + persistence
 5. Production sandbox design
-6. Spectator polish / post FX / camera director
-7. New modes and arenas
+6. Spectator extensions
+7. New modes / arenas
 ```
-
-Visual work may continue in parallel when it does not change engine contracts.
 
 ## v2 success condition
 
@@ -281,9 +256,7 @@ run a non-blocking seeded tournament
         ↓
 watch agents fight in a readable Three.js arena
         ↓
-see intent, movement, weapons and major decisions visually
-        ↓
-inspect behavior + replay + highlights
+inspect the same match with Three.js replay + highlights
         ↓
 export evidence
         ↓
