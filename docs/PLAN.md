@@ -4,7 +4,7 @@
 
 **Controller Experimentation Platform + Scalable Evaluation + Spectator-Grade Three.js Presentation**
 
-The project now has one authoritative engine and two execution/presentation paths built around the same contracts:
+The project now has one authoritative engine and two execution paths built around the same contracts:
 
 ```text
 trusted reference controllers ─┐
@@ -14,22 +14,24 @@ external controller Workers ──┘
 
 Three.js is the default product presentation, not an engine dependency.
 
-## Completed — Presentation Phase 2
+## Completed — Spectator presentation foundation
 
 - Three.js live arena replacing the previous DOM/CSS pseudo-arena.
 - Low-poly fighters, weapons, arena geometry, lighting, fog and shadows.
-- `ArenaFx` for trails, bursts, rings, attack arcs, heavy attacks, dodge, shield and weapon tracers.
-- `CameraDirector` with overview, combat, KO and selected-fighter modes.
-- `ArenaPostFX` with bloom, vignette, hit flash and restrained energy/chromatic treatment.
+- `ArenaFx`: trails, bursts, rings, attack/heavy arcs, dodge, shield, tracers and target links.
+- `CameraDirector`: overview, combat, KO and selected-fighter modes.
+- `ArenaPostFX`: bloom, vignette, hit flash and restrained distortion.
 - Chaos-reactive arena/post-processing presentation.
-- Observable intent/direction visualization without hidden reasoning.
+- Observable short `intent` and movement-direction visualization without hidden reasoning.
 - Shared `ThreeArenaViewport` for live and replay.
 - Replay play/pause, 0.5×–4× speed, seed switching, scrubber, highlights and fighter focus.
-- Responsive game-style HUD.
+- Automatic conservative rendering profile on narrow, low-resource or reduced-motion clients.
+- Optional user-enabled procedural SFX driven only by public match events.
+- Reduced-motion camera hardening support without any simulation changes.
 
-## Completed — Milestone 1: Controller Submission Workspace
+## Completed — Controller Submission Workspace
 
-`/submit` now provides:
+`/submit` provides:
 
 - multiple editable participants
 - agent/model fields
@@ -43,10 +45,13 @@ Three.js is the default product presentation, not an engine dependency.
 - exact-submission UI lock
 - portable submission export
 - direct isolated tournament launch after locking
+- comma/space seed lists
+- deterministic seed ranges such as `1-50`
+- 5/20/50/100-seed presets with a 100-seed browser cap
 
-The UI lock is not authoritative. Evaluation independently creates the canonical `ControllerLock` from the validated bytes.
+The UI lock is only an editing guard. Evaluation independently creates the canonical `ControllerLock` from validated exact bytes.
 
-## Completed — Milestone 2: Worker-backed External Execution Foundation
+## Completed — Worker-backed external evaluation foundation
 
 The engine was refactored without introducing a second simulator:
 
@@ -62,7 +67,7 @@ Controller Worker C ─┘
 engine.resolvePreparedTick(actions)
 ```
 
-The original synchronous `step()` now uses the same prepare/resolve core.
+The original synchronous `step()` uses the same prepare/resolve core.
 
 Delivered:
 
@@ -72,33 +77,35 @@ Delivered:
 - per-tick timeout
 - concurrent same-tick collection
 - neutral sanitized fallback
-- timeout/failure diagnostics outside authoritative state
 - accepted actions recorded into normal `MatchRecord`s
 - controller runtimes recreated between independent seeded matches
+- timeout/failure counters outside authoritative state
+- per-controller decision latency sampling, average and maximum latency
 
 Browser Workers are fault isolation, not a hardened hostile multi-tenant security boundary.
 
-## Completed foundation — Milestone 3: Tournament Worker and Progress Streaming
+## Completed foundation — Tournament Worker + progress
 
 Delivered:
 
 - dedicated tournament orchestration Worker
 - nested per-controller Workers
 - progress messages while each match runs
-- match/tick progress exposed to the Submission Workspace
-- cancellation by terminating the tournament Worker
-- periodic yielding inside browser evaluation
-- portable final artifact identical in shape to the trusted path
-- reusable aggregation from authoritative `MatchSummary`s
+- match/tick progress exposed to Submission Workspace
+- cancellation by terminating the Tournament Worker
+- periodic browser yielding
+- final artifact matching the trusted path schema
+- reusable authoritative `MatchSummary` aggregation
+- partial tournament/leader aggregate after each completed seed
+- live current-decision latency display
+- completion summary for timeout/failure counts and slowest average controller latency
 
-Remaining hardening before calling this production-scale:
+Remaining validation before calling browser execution production-scale:
 
-- configurable seed-range/preset UI instead of the current reference seed list
-- explicit 50–100 seed browser load benchmarks on target mobile/desktop devices
-- optional partial aggregate/fingerprint streaming rather than only execution progress
-- richer runtime-duration telemetry
+- explicit 50–100 seed load benchmark runs on representative desktop/mobile devices
+- benchmark history and regression thresholds
 
-## Mostly completed — Milestone 4: Artifact Import, Persistence and Replay UX
+## Mostly completed — Artifact import, persistence and replay UX
 
 Delivered:
 
@@ -106,22 +113,22 @@ Delivered:
 - ControllerLock validation during import
 - submission validation during import
 - replay-record structural validation
-- JSON file import in Tournament Lab
-- open imported evidence without rerunning controllers
+- JSON import in Tournament Lab
+- imported replay without rerunning controllers
 - IndexedDB storage adapter
 - automatic persistence after isolated evaluation
 - recent-evidence reopening
 - manual local save
 - Three.js replay parity with live
 
-Remaining polish:
+Remaining product hardening:
 
-- event-category filters
-- artifact delete/rename UI
-- stronger schema validation for every deeply nested replay field
+- artifact delete/rename/storage management UI
+- deeper validation for every nested replay/world-state field
 - storage migration strategy for future schema versions
+- optional event-category filters
 
-## Architecture completed — Milestone 5: Production Sandbox Design
+## Architecture completed — Production sandbox design
 
 See [`SANDBOX.md`](./SANDBOX.md).
 
@@ -129,7 +136,7 @@ Specified:
 
 - server runtime protocol
 - one isolated runtime per controller
-- process/container/microVM options
+- process/container/microVM implementation options
 - startup/per-tick deadlines
 - CPU, memory, process, disk, output and network limits
 - admission validation
@@ -137,38 +144,44 @@ Specified:
 - runtime diagnostics
 - public-deployment security gate
 
-Not implemented yet: the hardened server sandbox itself. Public hostile multi-tenant arbitrary-source execution must remain disabled until that deployment gate is satisfied.
+Not implemented: the hardened server sandbox itself. Public hostile multi-tenant arbitrary-source execution must remain disabled until the deployment gate is satisfied.
 
-## Current focus — Product Hardening + Spectator Extensions
+## Current focus — hardening and strategic depth
 
-### A. Evaluation hardening
+### A. Evaluation / evidence hardening
 
-- seed-range/preset controls
-- 50–100 seed load testing
-- partial aggregate streaming
-- runtime latency/timeout visualization
-- artifact storage management
-- deeper import schema verification
+1. run and record 50–100 seed target-device benchmarks
+2. define performance/regression thresholds
+3. deepen artifact/replay schema verification
+4. add artifact rename/delete/storage-management UI
+5. define artifact storage migration policy
 
-### B. Spectator extensions
+### B. Spectator polish
 
-- automatic visual quality selection for constrained devices
-- audio/SFX layer driven only from public match events
-- reduced-motion / reduced-camera-shake mode
+Already delivered:
+
+- adaptive low/high renderer selection
+- OS reduced-motion-aware conservative profile
+- procedural event SFX with explicit user enable
+
+Remaining:
+
+- explicit in-product reduced-camera-shake toggle independent of OS preference
+- replay audio and event-category sound controls
 - richer chaos-specific environment animation
 - cinematic replay camera presets for highlight categories
-- arena themes that reuse renderer contracts
+- reusable arena themes
 
-### C. New strategic modes after hardening
+### C. Strategic mode experiments
 
-Candidates:
+Only after the current hardening baseline is measured:
 
 - alternative arena layouts
 - team mode
 - objective/control-point mode
-- hazards that create real controller trade-offs
+- hazards that create measurable controller trade-offs
 
-Any new mode must first demonstrate behavioral differentiation. Visual variety alone is not enough reason to change authoritative rules.
+Any new mode must demonstrate behavioral differentiation. Visual variety alone is not enough reason to alter authoritative rules.
 
 ## Explicit non-goals
 
@@ -185,19 +198,22 @@ Any new mode must first demonstrate behavioral differentiation. Visual variety a
 ## Current implementation order
 
 ```text
-✓ Three.js Presentation Phase 2
+✓ Three.js spectator foundation
 ✓ Submission Workspace
-✓ Worker-backed external evaluation foundation
-✓ Tournament Worker + progress/cancel foundation
+✓ Worker-backed external evaluation
+✓ Tournament Worker + progress/cancel
+✓ partial aggregates + runtime latency diagnostics
+✓ configurable seeds / 5-100 seed presets
 ✓ Artifact import + IndexedDB persistence
+✓ adaptive rendering + public-event SFX
 ✓ Production sandbox architecture document
         ↓
 NOW
-1. evaluation hardening / configurable tournaments
-2. spectator accessibility + audio + adaptive quality
-3. richer replay/artifact management
+1. target-device 50–100 seed benchmarks
+2. deep artifact validation + storage management
+3. spectator accessibility/replay polish
 4. strategic arena/mode experiments
-5. hardened server sandbox implementation before public arbitrary code
+5. hardened server sandbox before public hostile arbitrary code
 ```
 
 ## v2 product loop now available
@@ -209,11 +225,15 @@ validate source + strategy
         ↓
 lock exact submissions
         ↓
+choose deterministic seed set/range
+        ↓
 Tournament Worker
         ↓
 per-controller isolated Workers
         ↓
 same-tick authoritative evaluation
+        ↓
+partial aggregates + runtime diagnostics
         ↓
 behavior aggregate + replay records
         ↓
@@ -226,4 +246,4 @@ Three.js replay + highlights + fighter focus
 export / import / reopen later
 ```
 
-The next work should improve scale, observability, accessibility and strategic depth rather than introduce another engine or presentation architecture.
+Next work should improve measured scale, evidence robustness, accessibility and strategic depth rather than introduce another engine or presentation architecture.
