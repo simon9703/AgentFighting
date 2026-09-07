@@ -59,7 +59,16 @@
 ### Product presentation
 
 - ☑️ Live authoritative arena viewer
-- ☑️ Responsive 2D/2.5D presentation
+- ☑️ Three.js default live renderer
+- ☑️ Low-poly 3D arena / fighters / lighting / shadows / fog
+- ☑️ Dynamic spectator camera and combat camera shake
+- ☑️ Presentation-only particle system (`ArenaFx`)
+- ☑️ Fast-movement trails
+- ☑️ Hit / weapon / stock-loss / elimination effects
+- ☑️ 3D weapon pickups
+- ☑️ Agent intent visualization
+- ☑️ Chaos-reactive environment lighting
+- ☑️ Responsive game-style React HUD
 - ☑️ Tournament Lab
 - ☑️ Controller lock/source hash inspection
 - ☑️ Behavior fingerprint UI
@@ -67,9 +76,12 @@
 - ☑️ Per-seed replay switching
 - ☑️ Highlight navigation
 - ☑️ Product navigation between live arena and tournament lab
+- ☐ Attack arc / heavy wind-up / dodge / shield readability
+- ☐ Shared spectator camera director
+- ☐ Post-processing stack and visual quality tiers
+- ☐ Three.js replay presentation parity
 - ☐ Real submission editor/import UI
 - ☐ Validation/policy violation UI
-- ☐ Richer combat readability and effects
 - ☐ Artifact import/replay viewer
 
 ## v1 completion status
@@ -87,20 +99,26 @@ sample submissions
 → artifact/report export
 ```
 
-The v1 engine/evaluation architecture is now treated as **frozen**. New work should extend the existing contracts instead of creating parallel game/evaluation systems.
+The v1 engine/evaluation architecture is treated as **frozen**. New work extends existing contracts instead of creating parallel game/evaluation systems.
 
-## v2 — Submission Platform and Scalable Evaluation
+## v2 — Submission Platform, Scalable Evaluation and Spectator Presentation
 
-The next phase is not about adding more weapons or maps first. It is about turning the local demo/evaluation loop into a real controller platform.
+The product now has two equally important surfaces:
+
+1. a trustworthy controller experimentation/evaluation pipeline
+2. a spectator-grade visualization that makes autonomous behavior understandable
+
+Three.js is the default live presentation implementation, but it is not part of the authoritative engine contract.
 
 Priority order:
 
-1. Controller Submission Workspace
-2. Worker-backed external execution end to end
-3. Tournament Worker and progress streaming
-4. Artifact import/persistence and replay ergonomics
-5. Production sandbox architecture
-6. Combat/presentation polish
-7. New arenas/game modes only after the platform path is stable
+1. Finish current Three.js Presentation Phase 2
+2. Controller Submission Workspace
+3. Worker-backed external execution end to end
+4. Tournament Worker and progress streaming
+5. Artifact import/persistence + Three.js replay parity
+6. Production sandbox architecture
+7. Shared camera/post-FX/spectator polish
+8. New arenas/game modes only after the platform path is stable
 
 Detailed milestones and acceptance criteria are maintained in [`PLAN.md`](./PLAN.md).
