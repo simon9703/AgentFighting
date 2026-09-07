@@ -17,6 +17,7 @@ export type FighterRig = {
   rightArm: THREE.Group;
   leftLeg: THREE.Group;
   rightLeg: THREE.Group;
+  weaponMount: THREE.Group;
   glow: THREE.Mesh;
   intentRing: THREE.Mesh;
   directionLine: THREE.Line;
@@ -24,6 +25,7 @@ export type FighterRig = {
   color: THREE.Color;
   reaction: FighterRigReaction;
   phase: number;
+  weaponType?: string;
 };
 
 export type FighterRigFrame = {
@@ -48,6 +50,53 @@ function limb(material: THREE.Material, x: number, y: number, length: number, ra
   mesh.castShadow = true;
   pivot.add(mesh);
   return pivot;
+}
+
+function disposeObject(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material) => material.dispose());
+    }
+  });
+}
+
+function heldWeapon(type: string) {
+  const root = new THREE.Group();
+  const color = type === 'bomb' ? 0xff6a6a : type === 'shield' ? 0x6ae4ff : type === 'hammer' ? 0xffd46a : 0xc68cff;
+  const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.15, roughness: 0.25, metalness: 0.78 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x161a22, roughness: 0.48, metalness: 0.64 });
+
+  if (type === 'hammer') {
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.68, 8), dark);
+    handle.position.y = -0.16;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.2), material);
+    head.position.y = 0.2;
+    root.add(handle, head);
+    root.rotation.z = -0.3;
+  } else if (type === 'shield') {
+    const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.09, 24), material);
+    shield.rotation.x = Math.PI / 2;
+    root.add(shield);
+    root.position.set(-0.22, 0.02, 0.38);
+    root.rotation.y = -0.2;
+  } else if (type === 'bomb') {
+    root.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 1), material));
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 6), material);
+    fuse.position.y = 0.23;
+    fuse.rotation.z = 0.5;
+    root.add(fuse);
+  } else {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.58), dark);
+    body.position.z = 0.18;
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.52, 10), material);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.z = 0.48;
+    root.add(body, barrel);
+    root.rotation.x = -0.12;
+  }
+  return root;
 }
 
 export function createFighterRig(colorValue: string): FighterRig {
@@ -91,6 +140,10 @@ export function createFighterRig(colorValue: string): FighterRig {
   leftArm.rotation.z = -0.12;
   rightArm.rotation.z = 0.12;
   root.add(leftArm, rightArm, leftLeg, rightLeg);
+
+  const weaponMount = new THREE.Group();
+  weaponMount.position.set(0.62, 0.98, 0.1);
+  root.add(weaponMount);
 
   for (const side of [-1, 1]) {
     const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), material);
@@ -142,6 +195,7 @@ export function createFighterRig(colorValue: string): FighterRig {
     rightArm,
     leftLeg,
     rightLeg,
+    weaponMount,
     glow,
     intentRing,
     directionLine,
@@ -150,6 +204,23 @@ export function createFighterRig(colorValue: string): FighterRig {
     reaction: { attack: 0, heavy: 0, dodge: 0, hit: 0, ko: 0, respawn: 0 },
     phase: Math.random() * Math.PI * 2,
   };
+}
+
+export function setFighterRigWeapon(rig: FighterRig, type?: string) {
+  if (rig.weaponType === type) return;
+  rig.weaponMount.children.forEach((child) => disposeObject(child));
+  rig.weaponMount.clear();
+  rig.weaponType = type;
+  if (!type) return;
+
+  const weapon = heldWeapon(type);
+  if (type === 'shield') {
+    weapon.position.x -= 0.72;
+    weapon.position.y += 0.28;
+  } else {
+    weapon.position.set(0.02, -0.18, 0.22);
+  }
+  rig.weaponMount.add(weapon);
 }
 
 export function triggerFighterRig(rig: FighterRig, type: keyof FighterRigReaction, amount = 1) {
@@ -187,6 +258,8 @@ export function updateFighterRig(rig: FighterRig, frame: FighterRigFrame) {
   rig.body.rotation.z = damp(rig.body.rotation.z, hit * 0.3 - dodge * 0.18, 16, frame.dt);
   rig.head.rotation.x = damp(rig.head.rotation.x, -forwardLean * 0.34, 12, frame.dt);
   rig.head.rotation.z = damp(rig.head.rotation.z, -hit * 0.2, 14, frame.dt);
+  rig.weaponMount.rotation.x = damp(rig.weaponMount.rotation.x, -attack * 0.65 - heavy * 1.05, 18, frame.dt);
+  rig.weaponMount.rotation.z = damp(rig.weaponMount.rotation.z, heavy * -0.28, 18, frame.dt);
 
   const bob = Math.abs(walk) * 0.055 * stride;
   rig.body.position.y = 1.2 - bob + respawn * 0.12;
