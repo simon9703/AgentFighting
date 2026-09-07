@@ -1,90 +1,99 @@
 # AgentFighting
 
-AgentFighting is a renderer-agnostic AI behavior arena. Multiple models generate **one controller each**, controllers are locked before the match, and the same fixed code reacts to a changing authoritative world every simulation tick.
+AgentFighting is a renderer-agnostic AI behavior arena. Multiple models generate **one controller each**, those controllers are locked before evaluation, and the same fixed code reacts to a changing shared world every simulation tick.
 
-The goal is not a serious model benchmark. The interesting output is emergent behavior: strategy, mistakes, risk-taking, weapon choice, rivalries, recovery and chaos.
+The project is not intended to be a serious model benchmark. Its value is in making agent behavior observable: strategy, mistakes, risk-taking, recovery, weapon choice, targeting, survival and emergent interaction.
 
-See [`agent.md`](./agent.md) for project goals and development rules, and [`docs/ROADMAP.md`](./docs/ROADMAP.md) for implementation status.
+## What exists today
 
-## Product loop
+AgentFighting v1 already supports the full local evaluation loop:
 
 ```text
-controller submissions + strategy manifests
+Controller submissions
         ↓
-validate + source hash + ControllerLock
+validate source + manifest
         ↓
-reproducible seeded tournament
+create stable source/controller identities
         ↓
-authoritative headless engine
+ControllerLock
         ↓
-combat + weapons + collisions + seeded chaos
+run many deterministic seeded matches
         ↓
-MatchRecord + Behavior Fingerprint + highlights
+authoritative WorldState + events + stats
         ↓
-live arena / replay inspector / JSON artifact / Markdown report
+MatchRecord / replay / highlights
+        ↓
+Behavior Fingerprint
+        ↓
+Tournament artifact + Markdown report
 ```
 
-Open `/` for the live authoritative arena and `/tournament` for the complete seeded evaluation and replay workflow.
+The web app currently exposes two product surfaces:
+
+- `/` — live authoritative arena viewer
+- `/tournament` — seeded tournament lab, behavior fingerprints, replay scrubbing, highlights and export
 
 ## Architecture
 
 ```text
 agents/
-  sample/generated controllers and canonical submissions
-
-features/engine/
-  authoritative headless simulation
-  observations + actions
-  deterministic RNG
-  combat / weapons / stocks / chaos
-  tournament + behavior metrics
+  built-in reference agents
+  canonical sample submissions
 
 features/controllers/
-  canonical generation prompt
-  strategy/submission schema
-  source/controller identity
-  trusted local source compiler
+  generation prompt
+  submission schema
+  source validation
+  stable controller/source identity
+  trusted local compiler
 
 features/sandbox/
-  trusted in-process runtime
-  async same-tick runtime protocol
-  browser Worker isolation primitive
-  timeout termination + fallback
+  controller runtime boundary
+  in-process runtime for trusted code
+  async same-tick action collection
+  browser Worker runtime for external code
+
+features/engine/
+  authoritative simulation
+  observations and action sanitization
+  movement / combat / weapons / stocks / chaos
+  deterministic RNG
+  match summary and tournament aggregation
 
 features/replay/
-  replay schema + recorder
+  MatchRecord schema
+  per-tick actions and snapshots
   deterministic replay verification
-  compact highlight timeline
+  highlight timeline
 
 features/evaluation/
   ControllerLock
-  seeded submission tournament
-  portable JSON artifact
-  human-readable Markdown report
+  submission tournament pipeline
+  portable TournamentArtifact
+  Markdown report generation
 
 features/renderers/
-  passive MatchSession + renderer view-model
+  passive renderer-facing adapters/view models
 
 features/arena/
-  authoritative 2.5D live presentation
+  current live 2D/2.5D arena presentation
 
 features/tournament/
-  Behavior Fingerprints
-  replay scrubbing + highlight navigation
-  artifact/report export
+  Tournament Lab product UI
 ```
 
-The renderer is intentionally not authoritative. Canvas, Pixi, Three.js, React Three Fiber or another presentation layer can replace the current first-version 2.5D UI without changing controller strategy or match rules.
+The dependency direction is deliberate: **presentation never owns match truth**.
 
-## Fairness and determinism
+## Core invariants
 
-- every active controller observes the same authoritative pre-action snapshot for tick N
-- all actions are collected before world resolution produces tick N+1
-- controller outputs are sanitized and invalid output becomes a neutral action
-- authoritative randomness comes only from the seeded engine RNG
-- source identities are locked before tournament evaluation starts
-- one controller failure or timeout must not crash or stall the entire match
-- replay data stores sanitized actions, authoritative state and public events rather than video
+- every active controller observes the same pre-action snapshot for a tick
+- all actions are collected before authoritative resolution
+- controller outputs are sanitized
+- engine randomness comes only from seeded RNG
+- renderers cannot mutate combat, stocks, chaos or winner state
+- a controller exception or timeout must not crash the match
+- externally supplied controller code must not be treated as trusted local code
+- controller identity is locked before seeded evaluation begins
 
 ## Controller contract
 
@@ -94,38 +103,53 @@ interface AgentController {
 }
 ```
 
-Controllers may keep private memory in their closure but cannot call an LLM again during the match.
+Controllers may keep private memory in their closure, but they do not call an LLM again during the match.
 
-A submission contains a strategy manifest plus self-contained JavaScript source. `evaluateControllerSubmissions()` validates the submission set, creates a stable `ControllerLock`, runs the same locked controllers over many seeds, aggregates Behavior Fingerprints, records every match and bundles everything into a portable tournament artifact.
+A model submission includes:
 
-The local compiler remains explicitly trusted-development-only. Browser Worker runtime primitives now provide an isolated async execution boundary with startup/per-tick timeout handling. Truly arbitrary public source should still use a server process/container runtime with hard memory accounting.
+- `agentId`
+- model name
+- strategy manifest
+- self-contained JavaScript controller source
 
-## Tournament Lab
+The source receives stable hashes/identities so a replay can identify exactly which controller participated.
 
-`/tournament` demonstrates the complete local/reproducible product loop:
+## Evaluation and replay
 
-- four deliberately different generated-style controller submissions
-- immutable lock and source hashes
-- five deterministic seeds
-- win rate + average rank
-- Behavior Fingerprint comparison
-- authoritative tick-by-tick replay scrubber
-- highlight navigation
-- downloadable versioned JSON artifact
-- downloadable Markdown post-match report
+`evaluateControllerSubmissions()` is the trusted local end-to-end evaluation entry point. It validates submissions, creates a `ControllerLock`, runs the same participant set across many seeds, aggregates behavior fingerprints, and produces independently replayable `MatchRecord`s.
 
-## Current arena rules
+A portable tournament artifact contains:
 
-Initial mode is a chaotic platform brawl:
+- schema version
+- controller lock and hashes
+- original submissions and manifests
+- tournament seeds/config
+- match summaries
+- behavior fingerprints
+- replay records
+
+Replay is simulation data, not recorded video. Any future renderer can consume the same records.
+
+## Runtime safety
+
+`compileTrustedControllerSource()` uses `new Function` only for trusted local development. It is **not a sandbox**.
+
+For external controller code, the project now has a browser Worker runtime and an asynchronous same-tick collection protocol with startup/per-tick timeout handling and neutral fallback actions. This is suitable for browser isolation and architecture validation, but it is not a hardened hostile multi-tenant sandbox.
+
+A production public submission service still needs process/container isolation, hard resource quotas and server-side admission controls.
+
+## Current game rules
+
+The initial environment is a Smash/Fall-Guys-like arena:
 
 - 4–8 agents
 - stock-based survival
-- movement, dodge, normal attack, heavy attack
-- hammer, shield, push gun, bomb
-- ice, wind, low gravity, shrinking arena
-- body interaction and knockback
+- movement, dodge, normal attack and heavy attack
+- hammer, shield, push gun and bomb
+- ice, wind, low gravity and shrinking arena events
+- body collisions and knockback
 
-The strategy space intentionally contains trade-offs: attack, retreat, loot, hold center, chase weak opponents, avoid hazards, or exploit an edge opportunity.
+The environment should continuously create trade-offs rather than one globally dominant strategy.
 
 ## Run
 
@@ -134,17 +158,23 @@ pnpm install
 pnpm dev
 ```
 
-Then open:
+Open:
 
-```text
-/             live authoritative arena
-/tournament   seeded evaluation + replay + export lab
-```
+- `http://localhost:3000/`
+- `http://localhost:3000/tournament`
 
-## Build
+## Verify
 
 ```bash
-pnpm typecheck
-pnpm build
-pnpm start
+pnpm check
 ```
+
+This runs both TypeScript checking and the production Next.js build.
+
+## Project status
+
+The v1 architecture and local product loop are considered complete enough to freeze. New work should not add duplicate game rules or another evaluation path.
+
+The next phase is **Submission Platform + Scalable Evaluation + Renderer Polish**. See [`docs/PLAN.md`](./docs/PLAN.md).
+
+For architectural constraints and agent-facing development rules, see [`agent.md`](./agent.md) and [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
