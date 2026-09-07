@@ -8,12 +8,13 @@ import type {
   ArenaConfig,
   ArenaEngine,
   EngineOptions,
+  ExternalActionSet,
   FighterState,
   FighterStats,
   MatchEvent,
   MatchSummary,
+  PreparedArenaTick,
   WeaponState,
-  WeaponType,
   WorldState,
 } from './types';
 
@@ -25,49 +26,18 @@ const DEFAULT_CONFIG: ArenaConfig = {
   outMargin: 1.6,
   stocksPerAgent: 3,
   respawnSeconds: 2.2,
-  chaos: {
-    enabled: true,
-    firstAtSeconds: 11,
-    intervalMinSeconds: 14,
-    intervalMaxSeconds: 21,
-    durationSeconds: 9,
-  },
-  weapons: {
-    enabled: true,
-    respawnSeconds: 12,
-    types: ['hammer', 'shield', 'push-gun', 'bomb'],
-  },
+  chaos: { enabled: true, firstAtSeconds: 11, intervalMinSeconds: 14, intervalMaxSeconds: 21, durationSeconds: 9 },
+  weapons: { enabled: true, respawnSeconds: 12, types: ['hammer', 'shield', 'push-gun', 'bomb'] },
 };
 
 function emptyStats(): FighterStats {
-  return {
-    attacks: 0,
-    hits: 0,
-    heavyAttacks: 0,
-    dodges: 0,
-    damageDealt: 0,
-    damageTaken: 0,
-    kos: 0,
-    stocksLost: 0,
-    weaponsPicked: 0,
-    weaponsUsed: 0,
-    distanceTravelled: 0,
-    timeNearEdge: 0,
-    timeInCenter: 0,
-  };
+  return { attacks: 0, hits: 0, heavyAttacks: 0, dodges: 0, damageDealt: 0, damageTaken: 0, kos: 0, stocksLost: 0, weaponsPicked: 0, weaponsUsed: 0, distanceTravelled: 0, timeNearEdge: 0, timeInCenter: 0 };
 }
 
-function cloneStats(stats: FighterStats): FighterStats {
-  return { ...stats };
-}
+function cloneStats(stats: FighterStats): FighterStats { return { ...stats }; }
 
 function mergeConfig(input?: Partial<ArenaConfig>): ArenaConfig {
-  return {
-    ...DEFAULT_CONFIG,
-    ...input,
-    chaos: { ...DEFAULT_CONFIG.chaos, ...(input?.chaos ?? {}) },
-    weapons: { ...DEFAULT_CONFIG.weapons, ...(input?.weapons ?? {}) },
-  };
+  return { ...DEFAULT_CONFIG, ...input, chaos: { ...DEFAULT_CONFIG.chaos, ...(input?.chaos ?? {}) }, weapons: { ...DEFAULT_CONFIG.weapons, ...(input?.weapons ?? {}) } };
 }
 
 function buildFighter(agent: AgentDefinition, index: number, count: number, config: ArenaConfig): FighterState {
@@ -96,21 +66,11 @@ function buildWeapons(config: ArenaConfig): WeaponState[] {
   if (!config.weapons.enabled) return [];
   return config.weapons.types.map((type, index, all) => {
     const angle = (index / all.length) * Math.PI * 2 + Math.PI / 4;
-    return {
-      id: `weapon-${index}`,
-      type,
-      position: { x: Math.cos(angle) * 6.1, z: Math.sin(angle) * 6.1 },
-      available: true,
-      respawnAt: 0,
-    };
+    return { id: `weapon-${index}`, type, position: { x: Math.cos(angle) * 6.1, z: Math.sin(angle) * 6.1 }, available: true, respawnAt: 0 };
   });
 }
 
-export function createArenaEngine(
-  agents: AgentDefinition[],
-  inputConfig?: Partial<ArenaConfig>,
-  options: EngineOptions = {},
-): ArenaEngine {
+export function createArenaEngine(agents: AgentDefinition[], inputConfig?: Partial<ArenaConfig>, options: EngineOptions = {}): ArenaEngine {
   if (agents.length < 2) throw new Error('Arena requires at least two agents');
 
   const config = mergeConfig(inputConfig);
@@ -119,6 +79,7 @@ export function createArenaEngine(
   const controllers = new Map<string, AgentController>(agents.map((agent) => [agent.id, agent.createController()]));
   let eventId = 0;
   let nextChaosAt = config.chaos.firstAtSeconds;
+  let preparedTick: PreparedArenaTick | null = null;
 
   const state: WorldState = {
     matchId: `match-${config.seed}`,
@@ -134,10 +95,7 @@ export function createArenaEngine(
     events: [],
   };
 
-  const emit = (event: Omit<MatchEvent, 'id' | 'tick' | 'time'>) => {
-    state.events.push({ id: ++eventId, tick: state.tick, time: state.time, ...event });
-  };
-
+  const emit = (event: Omit<MatchEvent, 'id' | 'tick' | 'time'>) => state.events.push({ id: ++eventId, tick: state.tick, time: state.time, ...event });
   const living = () => state.fighters.filter((fighter) => !fighter.eliminated);
 
   const respawn = (fighter: FighterState) => {
@@ -158,18 +116,14 @@ export function createArenaEngine(
     fighter.stats.stocksLost += 1;
     fighter.weapon = undefined;
     emit({ type: 'stock-lost', actor: fighter.id, detail: `${fighter.name} lost a stock` });
-
     if (fighter.lastAttacker) {
       const attacker = state.fighters.find((candidate) => candidate.id === fighter.lastAttacker);
       if (attacker && attacker.id !== fighter.id) attacker.stats.kos += 1;
     }
-
     if (fighter.stocks <= 0) {
       fighter.eliminated = true;
       emit({ type: 'eliminated', actor: fighter.id, detail: `${fighter.name} eliminated` });
-    } else {
-      fighter.respawnFor = config.respawnSeconds;
-    }
+    } else fighter.respawnFor = config.respawnSeconds;
   };
 
   const applyHit = (attacker: FighterState, target: FighterState, damage: number, baseKnockback: number, label: string) => {
@@ -187,13 +141,7 @@ export function createArenaEngine(
     attacker.stats.hits += 1;
     attacker.stats.damageDealt += appliedDamage;
     target.stats.damageTaken += appliedDamage;
-    emit({
-      type: 'hit',
-      actor: attacker.id,
-      target: target.id,
-      detail: `${attacker.name} ${label}-hit ${target.name}`,
-      meta: { damage: appliedDamage, knockback },
-    });
+    emit({ type: 'hit', actor: attacker.id, target: target.id, detail: `${attacker.name} ${label}-hit ${target.name}`, meta: { damage: appliedDamage, knockback } });
   };
 
   const nearestTarget = (attacker: FighterState, range: number) => state.fighters
@@ -204,7 +152,6 @@ export function createArenaEngine(
 
   const resolveAttack = (fighter: FighterState, action: Action) => {
     if (fighter.stunnedFor > 0) return;
-
     if (action.heavyAttack && fighter.cooldowns.heavyAttack <= 0) {
       fighter.cooldowns.heavyAttack = 0.92;
       fighter.stats.attacks += 1;
@@ -213,7 +160,6 @@ export function createArenaEngine(
       if (target) applyHit(fighter, target, 15, 8.2, 'heavy');
       return;
     }
-
     if (action.attack && fighter.cooldowns.attack <= 0) {
       fighter.cooldowns.attack = 0.3;
       fighter.stats.attacks += 1;
@@ -224,13 +170,10 @@ export function createArenaEngine(
 
   const resolvePickup = (fighter: FighterState, action: Action) => {
     if (!action.pickup || fighter.weapon || !config.weapons.enabled) return;
-    const item = state.weapons
-      .filter((weapon) => weapon.available)
+    const item = state.weapons.filter((weapon) => weapon.available)
       .map((weapon) => ({ weapon, distance: Math.hypot(weapon.position.x - fighter.position.x, weapon.position.z - fighter.position.z) }))
-      .filter(({ distance }) => distance <= 0.9)
-      .sort((a, b) => a.distance - b.distance)[0]?.weapon;
+      .filter(({ distance }) => distance <= 0.9).sort((a, b) => a.distance - b.distance)[0]?.weapon;
     if (!item) return;
-
     fighter.weapon = item.type;
     fighter.stats.weaponsPicked += 1;
     item.available = false;
@@ -249,37 +192,26 @@ export function createArenaEngine(
   const resolveWeapon = (fighter: FighterState, action: Action) => {
     if (!action.useWeapon || !fighter.weapon) return;
     const weapon = consumeWeapon(fighter);
-
-    if (weapon === 'shield') {
-      fighter.shieldFor = 4;
-      return;
-    }
-
+    if (weapon === 'shield') { fighter.shieldFor = 4; return; }
     if (weapon === 'hammer') {
       const target = nearestTarget(fighter, 2.9);
       if (target) applyHit(fighter, target, 18, 11.5, 'hammer');
       return;
     }
-
     if (weapon === 'push-gun') {
       const aimLength = Math.hypot(action.aimX ?? 0, action.aimZ ?? 0) || 1;
       const ax = (action.aimX ?? 0) / aimLength;
       const az = (action.aimZ ?? 0) / aimLength;
-      const target = state.fighters
-        .filter((candidate) => candidate.id !== fighter.id && !candidate.eliminated && candidate.respawnFor <= 0)
+      const target = state.fighters.filter((candidate) => candidate.id !== fighter.id && !candidate.eliminated && candidate.respawnFor <= 0)
         .map((candidate) => {
           const dx = candidate.position.x - fighter.position.x;
           const dz = candidate.position.z - fighter.position.z;
           const distance = Math.hypot(dx, dz) || 1;
-          const alignment = (dx / distance) * ax + (dz / distance) * az;
-          return { candidate, distance, alignment };
-        })
-        .filter(({ distance, alignment }) => distance < 9 && alignment > 0.88)
-        .sort((a, b) => a.distance - b.distance)[0]?.candidate;
+          return { candidate, distance, alignment: (dx / distance) * ax + (dz / distance) * az };
+        }).filter(({ distance, alignment }) => distance < 9 && alignment > 0.88).sort((a, b) => a.distance - b.distance)[0]?.candidate;
       if (target) applyHit(fighter, target, 3, 13, 'push-gun');
       return;
     }
-
     if (weapon === 'bomb') {
       for (const target of state.fighters) {
         if (target.id === fighter.id || target.eliminated || target.respawnFor > 0) continue;
@@ -290,24 +222,20 @@ export function createArenaEngine(
   };
 
   const resolveBodyCollisions = () => {
-    for (let i = 0; i < state.fighters.length; i += 1) {
-      for (let j = i + 1; j < state.fighters.length; j += 1) {
-        const a = state.fighters[i]!;
-        const b = state.fighters[j]!;
-        if (a.eliminated || b.eliminated || a.respawnFor > 0 || b.respawnFor > 0) continue;
-        const dx = b.position.x - a.position.x;
-        const dz = b.position.z - a.position.z;
-        const distance = Math.hypot(dx, dz);
-        const minDistance = 0.92;
-        if (distance <= 0 || distance >= minDistance) continue;
-        const nx = dx / distance;
-        const nz = dz / distance;
-        const push = (minDistance - distance) * 0.5;
-        a.position.x -= nx * push;
-        a.position.z -= nz * push;
-        b.position.x += nx * push;
-        b.position.z += nz * push;
-      }
+    for (let i = 0; i < state.fighters.length; i += 1) for (let j = i + 1; j < state.fighters.length; j += 1) {
+      const a = state.fighters[i]!;
+      const b = state.fighters[j]!;
+      if (a.eliminated || b.eliminated || a.respawnFor > 0 || b.respawnFor > 0) continue;
+      const dx = b.position.x - a.position.x;
+      const dz = b.position.z - a.position.z;
+      const distance = Math.hypot(dx, dz);
+      const minDistance = 0.92;
+      if (distance <= 0 || distance >= minDistance) continue;
+      const nx = dx / distance;
+      const nz = dz / distance;
+      const push = (minDistance - distance) * 0.5;
+      a.position.x -= nx * push; a.position.z -= nz * push;
+      b.position.x += nx * push; b.position.z += nz * push;
     }
   };
 
@@ -317,13 +245,11 @@ export function createArenaEngine(
     state.chaos.type = type;
     state.chaos.until = state.time + config.chaos.durationSeconds;
     state.chaos.wind = { x: 0, z: 0 };
-
     if (type === 'wind') {
       const angle = rng.range(0, Math.PI * 2);
       state.chaos.wind = { x: Math.cos(angle) * 4.5, z: Math.sin(angle) * 4.5 };
     }
     if (type === 'shrink') state.arenaRadius = Math.max(6.4, state.arenaRadius - 0.8);
-
     emit({ type: 'chaos', detail: `Chaos event: ${type}`, meta: { chaos: type } });
     nextChaosAt = state.time + rng.range(config.chaos.intervalMinSeconds, config.chaos.intervalMaxSeconds);
   };
@@ -331,18 +257,16 @@ export function createArenaEngine(
   const finishIfNeeded = () => {
     const remaining = living();
     if (remaining.length > 1 && state.timeLeft > 0) return false;
-
     state.phase = 'finished';
-    const winner = remaining.length === 1
-      ? remaining[0]
-      : [...remaining].sort((a, b) => (b.stocks * 100 - b.damage) - (a.stocks * 100 - a.damage))[0];
+    const winner = remaining.length === 1 ? remaining[0] : [...remaining].sort((a, b) => (b.stocks * 100 - b.damage) - (a.stocks * 100 - a.damage))[0];
     state.winnerId = winner?.id;
     if (winner) emit({ type: 'win', actor: winner.id, detail: `${winner.name} wins` });
     return true;
   };
 
-  const step = () => {
-    if (state.phase === 'finished') return state;
+  const prepareTick = (): PreparedArenaTick | null => {
+    if (preparedTick) throw new Error('Previous prepared tick must be resolved before preparing another tick.');
+    if (state.phase === 'finished') return null;
     if (state.phase === 'ready') {
       state.phase = 'running';
       emit({ type: 'match-start', detail: `Match ${state.matchId} started` });
@@ -351,15 +275,9 @@ export function createArenaEngine(
     state.tick += 1;
     state.time = state.tick * dt;
     state.timeLeft = Math.max(0, config.durationSeconds - state.time);
-
     if (state.time >= nextChaosAt) triggerChaos();
-    if (state.chaos.type !== 'none' && state.chaos.type !== 'shrink' && state.time >= state.chaos.until) {
-      state.chaos = { type: 'none', until: 0, wind: { x: 0, z: 0 } };
-    }
-
-    for (const weapon of state.weapons) {
-      if (!weapon.available && state.time >= weapon.respawnAt) weapon.available = true;
-    }
+    if (state.chaos.type !== 'none' && state.chaos.type !== 'shrink' && state.time >= state.chaos.until) state.chaos = { type: 'none', until: 0, wind: { x: 0, z: 0 } };
+    for (const weapon of state.weapons) if (!weapon.available && state.time >= weapon.respawnAt) weapon.available = true;
 
     for (const fighter of state.fighters) {
       fighter.cooldowns.attack = Math.max(0, fighter.cooldowns.attack - dt);
@@ -374,39 +292,37 @@ export function createArenaEngine(
       }
     }
 
-    // IMPORTANT: every controller observes the same pre-action world state for this tick.
+    const observations = Object.fromEntries(state.fighters
+      .filter((fighter) => !fighter.eliminated && fighter.respawnFor <= 0)
+      .map((fighter) => [fighter.id, createObservation(state, fighter.id)]));
+    preparedTick = { tick: state.tick, time: state.time, observations };
+    return preparedTick;
+  };
+
+  const actionFromSet = (actions: ExternalActionSet, id: string) => actions instanceof Map ? actions.get(id) : actions[id];
+
+  const resolvePreparedTick = (externalActions: ExternalActionSet) => {
+    if (!preparedTick) throw new Error('prepareTick() must be called before resolvePreparedTick().');
     const actions = new Map<string, Action>();
     for (const fighter of state.fighters) {
       if (fighter.eliminated || fighter.respawnFor > 0) continue;
-      const controller = controllers.get(fighter.id)!;
-      try {
-        const observation = createObservation(state, fighter.id);
-        const output = options.runtime
-          ? options.runtime.execute({ agentId: fighter.id, controller, observation })
-          : controller.act(observation);
-        actions.set(fighter.id, sanitizeAction(output));
-      } catch {
-        actions.set(fighter.id, sanitizeAction(null));
-      }
+      actions.set(fighter.id, sanitizeAction(actionFromSet(externalActions, fighter.id)));
     }
 
     for (const fighter of state.fighters) {
       const action = actions.get(fighter.id);
       if (!action || fighter.eliminated || fighter.respawnFor > 0) continue;
       fighter.intent = action.intent ?? 'UNSPECIFIED';
-
       if (fighter.stunnedFor <= 0) {
         const acceleration = state.chaos.type === 'ice' ? 4.8 : 7.3;
         fighter.velocity.x += action.moveX * acceleration * dt;
         fighter.velocity.z += action.moveZ * acceleration * dt;
-
         if (action.dodge && fighter.cooldowns.dodge <= 0) {
           fighter.velocity.x += action.moveX * 3.4;
           fighter.velocity.z += action.moveZ * 3.4;
           fighter.cooldowns.dodge = 1.35;
           fighter.stats.dodges += 1;
         }
-
         resolvePickup(fighter, action);
         resolveWeapon(fighter, action);
         resolveAttack(fighter, action);
@@ -420,76 +336,64 @@ export function createArenaEngine(
         fighter.velocity.x += state.chaos.wind.x * dt;
         fighter.velocity.z += state.chaos.wind.z * dt;
       }
-
       const damping = state.chaos.type === 'ice' ? 0.992 : 0.94;
       fighter.velocity.x *= Math.pow(damping, dt * 60);
       fighter.velocity.z *= Math.pow(damping, dt * 60);
-
       const speed = Math.hypot(fighter.velocity.x, fighter.velocity.z);
       const maxSpeed = state.chaos.type === 'low-gravity' ? 7.4 : 6.6;
       if (speed > maxSpeed) {
         fighter.velocity.x *= maxSpeed / speed;
         fighter.velocity.z *= maxSpeed / speed;
       }
-
       fighter.position.x += fighter.velocity.x * dt;
       fighter.position.z += fighter.velocity.z * dt;
       fighter.stats.distanceTravelled += Math.hypot(fighter.position.x - before.x, fighter.position.z - before.z);
       fighter.distanceToEdge = state.arenaRadius - Math.hypot(fighter.position.x, fighter.position.z);
       if (fighter.distanceToEdge < 2) fighter.stats.timeNearEdge += dt;
       else fighter.stats.timeInCenter += dt;
-
       if (Math.hypot(fighter.position.x, fighter.position.z) > state.arenaRadius + config.outMargin) loseStock(fighter);
     }
 
     resolveBodyCollisions();
     finishIfNeeded();
-    options.onTick?.({
-      tick: state.tick,
-      time: state.time,
-      actions: Object.fromEntries(actions.entries()),
-      state,
-    });
+    options.onTick?.({ tick: state.tick, time: state.time, actions: Object.fromEntries(actions.entries()), state });
+    preparedTick = null;
     return state;
+  };
+
+  const step = () => {
+    const prepared = prepareTick();
+    if (!prepared) return state;
+    const actions: Record<string, Action> = {};
+    for (const [agentId, observation] of Object.entries(prepared.observations)) {
+      const controller = controllers.get(agentId)!;
+      try {
+        const output = options.runtime ? options.runtime.execute({ agentId, controller, observation }) : controller.act(observation);
+        actions[agentId] = sanitizeAction(output);
+      } catch { actions[agentId] = sanitizeAction(null); }
+    }
+    return resolvePreparedTick(actions);
   };
 
   const getSummary = (): MatchSummary | null => {
     if (state.phase !== 'finished') return null;
-    const ranking = [...state.fighters]
-      .sort((a, b) => {
-        if (a.id === state.winnerId) return -1;
-        if (b.id === state.winnerId) return 1;
-        return (b.stocks * 100 - b.damage) - (a.stocks * 100 - a.damage);
-      })
-      .map((fighter, index) => ({
-        id: fighter.id,
-        name: fighter.name,
-        rank: index + 1,
-        stats: cloneStats(fighter.stats),
-        damage: fighter.damage,
-        stocks: fighter.stocks,
-      }));
-
-    return {
-      matchId: state.matchId,
-      seed: state.seed,
-      duration: state.time,
-      winnerId: state.winnerId,
-      ranking,
-      events: state.events.map((event) => ({ ...event, meta: event.meta ? { ...event.meta } : undefined })),
-    };
+    const ranking = [...state.fighters].sort((a, b) => {
+      if (a.id === state.winnerId) return -1;
+      if (b.id === state.winnerId) return 1;
+      return (b.stocks * 100 - b.damage) - (a.stocks * 100 - a.damage);
+    }).map((fighter, index) => ({ id: fighter.id, name: fighter.name, rank: index + 1, stats: cloneStats(fighter.stats), damage: fighter.damage, stocks: fighter.stocks }));
+    return { matchId: state.matchId, seed: state.seed, duration: state.time, winnerId: state.winnerId, ranking, events: state.events.map((event) => ({ ...event, meta: event.meta ? { ...event.meta } : undefined })) };
   };
 
   return {
     getState: () => state,
     getConfig: () => config,
+    prepareTick,
+    resolvePreparedTick,
     step,
     run: (maxTicks = Math.ceil(config.durationSeconds * config.tickRate) + 1) => {
       let ticks = 0;
-      while (state.phase !== 'finished' && ticks < maxTicks) {
-        step();
-        ticks += 1;
-      }
+      while (state.phase !== 'finished' && ticks < maxTicks) { step(); ticks += 1; }
       return state;
     },
     getSummary,
