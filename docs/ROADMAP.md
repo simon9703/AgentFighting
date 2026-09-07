@@ -25,7 +25,7 @@
 - ☑️ Action-only deterministic replay verification
 - ☑️ Create a portable versioned tournament artifact (lock + submissions + records)
 - ☐ Persist tournament artifacts as versioned JSON files
-- ☐ Export a compact highlight timeline for any renderer
+- ☑️ Export a compact highlight timeline for any renderer
 
 ## Next: safe external controller execution
 
