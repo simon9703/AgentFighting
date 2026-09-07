@@ -1,12 +1,12 @@
 # AgentFighting
 
-AgentFighting is a renderer-agnostic AI behavior arena. Multiple models generate **one controller each**, those controllers are locked before evaluation, and the same fixed code reacts to a changing shared world every simulation tick.
+AgentFighting is a renderer-agnostic AI behavior arena with a **Three.js spectator presentation**. Multiple models generate one controller each, those controllers are locked before evaluation, and the same fixed code reacts to a changing shared world every simulation tick.
 
 The project is not intended to be a serious model benchmark. Its value is in making agent behavior observable: strategy, mistakes, risk-taking, recovery, weapon choice, targeting, survival and emergent interaction.
 
 ## What exists today
 
-AgentFighting v1 already supports the full local evaluation loop:
+AgentFighting already supports the full local evaluation loop:
 
 ```text
 Controller submissions
@@ -28,10 +28,31 @@ Behavior Fingerprint
 Tournament artifact + Markdown report
 ```
 
-The web app currently exposes two product surfaces:
+The web app exposes two main product surfaces:
 
-- `/` — live authoritative arena viewer
+- `/` — live authoritative arena viewer with a Three.js game-style presentation
 - `/tournament` — seeded tournament lab, behavior fingerprints, replay scrubbing, highlights and export
+
+## Visual direction
+
+The default live renderer now uses **Three.js** rather than a DOM/CSS pseudo-arena.
+
+Current presentation features include:
+
+- low-poly 3D fighters and arena geometry
+- lighting, shadows and fog
+- dynamic spectator camera
+- camera shake for significant combat events
+- 3D weapon pickups
+- movement trails
+- hit / weapon / stock-loss / elimination particles
+- agent intent rings
+- chaos-reactive arena lighting
+- React HUD layered independently over WebGL
+
+The visual target is a polished browser arcade/spectator experience: the 3D scene is the main product surface, while tactical data and evaluation evidence remain available in the HUD.
+
+Three.js does **not** own simulation truth. It only consumes renderer-friendly immutable data derived from the engine.
 
 ## Architecture
 
@@ -76,7 +97,9 @@ features/renderers/
   passive renderer-facing adapters/view models
 
 features/arena/
-  current live 2D/2.5D arena presentation
+  Three.js live viewport
+  presentation-only particle/effect system
+  React spectator HUD
 
 features/tournament/
   Tournament Lab product UI
@@ -128,13 +151,13 @@ A portable tournament artifact contains:
 - behavior fingerprints
 - replay records
 
-Replay is simulation data, not recorded video. Any future renderer can consume the same records.
+Replay is simulation data, not recorded video. Live and replay presentation can therefore share the same Three.js primitives without changing engine behavior.
 
 ## Runtime safety
 
 `compileTrustedControllerSource()` uses `new Function` only for trusted local development. It is **not a sandbox**.
 
-For external controller code, the project now has a browser Worker runtime and an asynchronous same-tick collection protocol with startup/per-tick timeout handling and neutral fallback actions. This is suitable for browser isolation and architecture validation, but it is not a hardened hostile multi-tenant sandbox.
+For external controller code, the project has a browser Worker runtime and an asynchronous same-tick collection protocol with startup/per-tick timeout handling and neutral fallback actions. This is suitable for browser isolation and architecture validation, but it is not a hardened hostile multi-tenant sandbox.
 
 A production public submission service still needs process/container isolation, hard resource quotas and server-side admission controls.
 
@@ -173,8 +196,8 @@ This runs both TypeScript checking and the production Next.js build.
 
 ## Project status
 
-The v1 architecture and local product loop are considered complete enough to freeze. New work should not add duplicate game rules or another evaluation path.
+The v1 authoritative engine/evaluation architecture is considered stable enough to freeze. New work should not add duplicate game rules or another evaluation path.
 
-The next phase is **Submission Platform + Scalable Evaluation + Renderer Polish**. See [`docs/PLAN.md`](./docs/PLAN.md).
+Current focus is **Three.js Presentation Phase 2**, followed by the submission/Worker/artifact path. See [`docs/PLAN.md`](./docs/PLAN.md) and [`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 For architectural constraints and agent-facing development rules, see [`agent.md`](./agent.md) and [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
