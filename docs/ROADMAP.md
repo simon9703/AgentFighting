@@ -1,70 +1,106 @@
 # AgentFighting Roadmap
 
-## Foundation
+## v1 — Architecture and Local Product Loop
+
+### Foundation
 
 - ☑️ Headless authoritative arena engine
 - ☑️ Same-tick observation and action resolution
 - ☑️ Seeded RNG and reproducible match configuration
-- ☑️ Combat, stocks, weapons, chaos events, and match summary
+- ☑️ Combat, stocks, weapons, chaos events and match summary
 - ☑️ Renderer-agnostic contracts
 
-## Controller workflow
+### Controller workflow
 
 - ☑️ `Observation -> Action` controller contract
-- ☑️ Action sanitization and controller-failure fallback
-- ☑️ Submission schema, source policy, and stable source hash
-- ☑️ Local trusted compiler for development only
-- ☑️ Tournament evaluation across multiple seeds
-- ☑️ Behavior fingerprint aggregation
-- ☑️ ControllerLock with stable lock hash before evaluation
+- ☑️ Action sanitization and failure fallback
+- ☑️ Submission schema and strategy manifest
+- ☑️ Source policy validation
+- ☑️ Stable source/controller identities
+- ☑️ Trusted local source compiler
+- ☑️ ControllerLock with stable lock hash
+- ☑️ Canonical sample submissions
 
-## Replay and records
+### Runtime boundary
+
+- ☑️ `ControllerRuntime` abstraction
+- ☑️ Trusted in-process runtime
+- ☑️ Asynchronous same-tick action collection protocol
+- ☑️ Browser Worker runtime
+- ☑️ Startup timeout
+- ☑️ Per-tick timeout
+- ☑️ Terminate/fallback behavior on timeout/failure
+- ☐ Hardened process/container runtime for hostile public submissions
+- ☐ Hard server-side CPU/memory/filesystem/network quotas
+
+### Replay and evidence
 
 - ☑️ Per-tick sanitized action recording
-- ☑️ Authoritative snapshots and event recording
+- ☑️ Authoritative state/event recording
+- ☑️ Versioned `MatchRecord`
 - ☑️ Action-only deterministic replay verification
-- ☑️ Portable versioned tournament artifact (lock + submissions + records + summaries)
-- ☑️ Downloadable versioned JSON tournament artifact
-- ☑️ Compact highlight timeline for any renderer
+- ☑️ Compact renderer-agnostic highlight timeline
+- ☑️ Versioned `TournamentArtifact`
+- ☑️ Markdown tournament report
+- ☑️ JSON artifact download
+- ☐ Artifact import and persistent local/server storage
 
-## External controller execution boundary
+### Tournament evaluation
 
-- ☑️ Async runtime protocol that preserves collect-before-resolve same-tick fairness
-- ☑️ Browser Worker runtime with startup isolation
-- ☑️ Per-tick timeout, Worker termination and safe neutral fallback
-- ☑️ Trusted local compilation kept separate from external runtime primitives
-- ☐ Add server process/container runtime with strict memory accounting for fully untrusted public submissions
+- ☑️ Multi-seed tournament runner
+- ☑️ Win rate and average rank
+- ☑️ Aggregate combat/movement statistics
+- ☑️ Behavior Fingerprint
+- ☑️ Submission → lock → tournament → record → artifact pipeline
+- ☐ Long tournament execution off the browser main thread
+- ☐ Progress/partial-result streaming
+- ☐ Named tournament presets and seed-range configuration UI
 
-## Real agent tournament workflow
+### Product presentation
 
-- ☑️ Canonical example controller submissions with distinct strategy manifests
-- ☑️ Store submission source, manifest, lock, config, records, fingerprints and summaries together
-- ☑️ Interactive repeatable seeded tournament workflow in `/tournament`
-- ☑️ Human-readable post-match Markdown reports without changing locked controllers
-- ☐ Add CLI command for CI/headless named tournament sets
+- ☑️ Live authoritative arena viewer
+- ☑️ Responsive 2D/2.5D presentation
+- ☑️ Tournament Lab
+- ☑️ Controller lock/source hash inspection
+- ☑️ Behavior fingerprint UI
+- ☑️ Replay scrubber
+- ☑️ Per-seed replay switching
+- ☑️ Highlight navigation
+- ☑️ Product navigation between live arena and tournament lab
+- ☐ Real submission editor/import UI
+- ☐ Validation/policy violation UI
+- ☐ Richer combat readability and effects
+- ☐ Artifact import/replay viewer
 
-## Presentation
+## v1 completion status
 
-- ☑️ Renderer-facing MatchSession that exposes only headless state
-- ☑️ Primary live experience bound to authoritative MatchSession state only
-- ☑️ Responsive 2D/2.5D live arena inspector
-- ☑️ Replay scrubbing across every recorded authoritative tick
-- ☑️ Highlight navigation into replay ticks
-- ☑️ Behavior Fingerprint comparison UI
-- ☑️ Tournament artifact and report export UI
-- ☑️ 2.5D is the primary first-version presentation; renderer remains replaceable
-- ☐ Add richer impact, weapon and chaos animation without moving rules into presentation
+The local/reference product loop is complete:
 
-## First-version product loop
+```text
+sample submissions
+→ validate
+→ identify + lock
+→ seeded tournament
+→ authoritative records
+→ behavior fingerprints
+→ replay/highlights
+→ artifact/report export
+```
 
-The repository now demonstrates the complete local/reproducible loop:
+The v1 engine/evaluation architecture is now treated as **frozen**. New work should extend the existing contracts instead of creating parallel game/evaluation systems.
 
-1. generated-style controller submissions declare source + strategy manifests,
-2. controller identities and source hashes are locked before evaluation,
-3. the same locked controllers run across a deterministic seed set,
-4. the live arena consumes authoritative engine state rather than renderer-owned rules,
-5. tournament results expose Behavior Fingerprints rather than only a winner,
-6. every recorded match can be scrubbed and navigated by highlights,
-7. the full JSON artifact and human-readable Markdown report can be exported.
+## v2 — Submission Platform and Scalable Evaluation
 
-The remaining security milestone is deployment-grade execution of arbitrary untrusted public source with hard process/container memory limits. That is an infrastructure hardening step, not a dependency of the local product/architecture loop.
+The next phase is not about adding more weapons or maps first. It is about turning the local demo/evaluation loop into a real controller platform.
+
+Priority order:
+
+1. Controller Submission Workspace
+2. Worker-backed external execution end to end
+3. Tournament Worker and progress streaming
+4. Artifact import/persistence and replay ergonomics
+5. Production sandbox architecture
+6. Combat/presentation polish
+7. New arenas/game modes only after the platform path is stable
+
+Detailed milestones and acceptance criteria are maintained in [`PLAN.md`](./PLAN.md).
