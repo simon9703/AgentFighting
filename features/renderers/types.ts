@@ -1,0 +1,11 @@
+import type { MatchSummary, WorldState } from '@/features/engine';
+
+export interface ArenaRenderer {
+  mount?(element: HTMLElement): void;
+  render(state: Readonly<WorldState>): void;
+  onMatchEnd?(summary: MatchSummary): void;
+  dispose?(): void;
+}
+
+// Renderers are deliberately passive. They may animate/interpolate state,
+// but must never mutate combat rules, damage, stocks, chaos, or winner state.
