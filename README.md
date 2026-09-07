@@ -1,36 +1,36 @@
 # AgentFighting
 
-AgentFighting is a renderer-agnostic AI behavior arena. Multiple models generate **one controller each**, controllers are locked before the match, and the same code reacts to a changing world every simulation tick.
+AgentFighting is a renderer-agnostic AI behavior arena. Multiple models generate **one controller each**, controllers are locked before the match, and the same fixed code reacts to a changing authoritative world every simulation tick.
 
-The goal is not a serious benchmark. The interesting output is emergent behavior: strategy, mistakes, risk-taking, weapon choice, rivalries, recovery and chaos.
+The goal is not a serious model benchmark. The interesting output is emergent behavior: strategy, mistakes, risk-taking, weapon choice, rivalries, recovery and chaos.
 
-See [`agent.md`](./agent.md) for project goals and development rules.
+See [`agent.md`](./agent.md) for project goals and development rules, and [`docs/ROADMAP.md`](./docs/ROADMAP.md) for implementation status.
 
-## Core loop
+## Product loop
 
 ```text
-same task + same API
+controller submissions + strategy manifests
         ↓
-Claude / Codex / Gemini / ...
+validate + source hash + ControllerLock
         ↓
-one generated controller each
+reproducible seeded tournament
         ↓
-LOCK CODE
+authoritative headless engine
         ↓
-Headless Arena Engine
+combat + weapons + collisions + seeded chaos
         ↓
-combat + weapons + collisions + seeded random events
+MatchRecord + Behavior Fingerprint + highlights
         ↓
-WorldState + events + stats + replay
-        ↓
-2D / 3D / replay renderer
+live arena / replay inspector / JSON artifact / Markdown report
 ```
+
+Open `/` for the live authoritative arena and `/tournament` for the complete seeded evaluation and replay workflow.
 
 ## Architecture
 
 ```text
 agents/
-  sample/generated controllers
+  sample/generated controllers and canonical submissions
 
 features/engine/
   authoritative headless simulation
@@ -43,37 +43,48 @@ features/controllers/
   canonical generation prompt
   strategy/submission schema
   source/controller identity
+  trusted local source compiler
 
 features/sandbox/
-  ControllerRuntime abstraction
-  trusted in-process adapter
-  runtime wrapping + action recording
+  trusted in-process runtime
+  async same-tick runtime protocol
+  browser Worker isolation primitive
+  timeout termination + fallback
 
 features/replay/
-  replay schema
-  deterministic match recorder
-  recorded headless match runner + deterministic verifier
+  replay schema + recorder
+  deterministic replay verification
+  compact highlight timeline
 
 features/evaluation/
-  submission -> validation -> runtime boundary -> seeded tournament
+  ControllerLock
+  seeded submission tournament
+  portable JSON artifact
+  human-readable Markdown report
 
 features/renderers/
-  passive renderer contracts
+  passive MatchSession + renderer view-model
 
 features/arena/
-  current 3D presentation prototype
+  authoritative 2.5D live presentation
+
+features/tournament/
+  Behavior Fingerprints
+  replay scrubbing + highlight navigation
+  artifact/report export
 ```
 
-The renderer is intentionally not authoritative. 2D Canvas, Pixi, Three.js or another presentation layer can replace the current 3D prototype without changing controller strategy or match rules.
+The renderer is intentionally not authoritative. Canvas, Pixi, Three.js, React Three Fiber or another presentation layer can replace the current first-version 2.5D UI without changing controller strategy or match rules.
 
-## Important simulation rules
+## Fairness and determinism
 
-- every agent sees the same pre-action world snapshot for a tick
-- all actions are collected before authoritative resolution
-- controller outputs are sanitized
-- engine randomness comes from a seeded RNG
-- generated controller code should eventually run behind an isolated `ControllerRuntime`
-- one controller failure must not crash the match
+- every active controller observes the same authoritative pre-action snapshot for tick N
+- all actions are collected before world resolution produces tick N+1
+- controller outputs are sanitized and invalid output becomes a neutral action
+- authoritative randomness comes only from the seeded engine RNG
+- source identities are locked before tournament evaluation starts
+- one controller failure or timeout must not crash or stall the entire match
+- replay data stores sanitized actions, authoritative state and public events rather than video
 
 ## Controller contract
 
@@ -85,34 +96,27 @@ interface AgentController {
 
 Controllers may keep private memory in their closure but cannot call an LLM again during the match.
 
-A model submission contains both a strategy manifest and source code. The source receives a stable identity/hash so a replay can say exactly which controller participated.
+A submission contains a strategy manifest plus self-contained JavaScript source. `evaluateControllerSubmissions()` validates the submission set, creates a stable `ControllerLock`, runs the same locked controllers over many seeds, aggregates Behavior Fingerprints, records every match and bundles everything into a portable tournament artifact.
 
-`evaluateControllerSubmissions()` is the local end-to-end entry point: it validates
-submissions, creates an immutable `ControllerLock`, runs the same group over many
-seeds, produces a behavior fingerprint, and writes one replayable `MatchRecord`
-per seed. The lock holds the controller id, model, strategy label, and source hash
-for the exact set that entered the tournament. The current source
-compiler is for trusted local development only; untrusted source still requires an
-isolated Worker/process runtime.
+The local compiler remains explicitly trusted-development-only. Browser Worker runtime primitives now provide an isolated async execution boundary with startup/per-tick timeout handling. Truly arbitrary public source should still use a server process/container runtime with hard memory accounting.
 
-## Replay
+## Tournament Lab
 
-A `MatchRecord` can contain:
+`/tournament` demonstrates the complete local/reproducible product loop:
 
-- engine version
-- seed + match config
-- controller ids / source hashes
-- initial world state
-- sanitized actions per tick
-- authoritative state snapshots
-- public events
-- final summary
+- four deliberately different generated-style controller submissions
+- immutable lock and source hashes
+- five deterministic seeds
+- win rate + average rank
+- Behavior Fingerprint comparison
+- authoritative tick-by-tick replay scrubber
+- highlight navigation
+- downloadable versioned JSON artifact
+- downloadable Markdown post-match report
 
-This is simulation data rather than a video, so any renderer can replay or inspect it.
+## Current arena rules
 
-## Current game rules
-
-Initial mode is a Smash/Fall-Guys-like physics brawl:
+Initial mode is a chaotic platform brawl:
 
 - 4–8 agents
 - stock-based survival
@@ -121,13 +125,20 @@ Initial mode is a Smash/Fall-Guys-like physics brawl:
 - ice, wind, low gravity, shrinking arena
 - body interaction and knockback
 
-The strategy space should intentionally contain trade-offs: attack, retreat, loot, hold center, chase weak opponents, avoid hazards, or exploit an edge opportunity.
+The strategy space intentionally contains trade-offs: attack, retreat, loot, hold center, chase weak opponents, avoid hazards, or exploit an edge opportunity.
 
 ## Run
 
 ```bash
 pnpm install
 pnpm dev
+```
+
+Then open:
+
+```text
+/             live authoritative arena
+/tournament   seeded evaluation + replay + export lab
 ```
 
 ## Build
@@ -137,14 +148,3 @@ pnpm typecheck
 pnpm build
 pnpm start
 ```
-
-## Development priority
-
-1. Headless authoritative engine
-2. Controller strategy/API
-3. Controller sandbox boundary
-4. deterministic replay / match records
-5. tournament + behavior fingerprint
-6. real model-generated controller workflow
-7. renderer integration
-8. final visual polish
