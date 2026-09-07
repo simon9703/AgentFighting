@@ -43,11 +43,7 @@ export interface FighterState {
   shieldFor: number;
   lastAttacker?: AgentId;
   intent: string;
-  cooldowns: {
-    attack: number;
-    heavyAttack: number;
-    dodge: number;
-  };
+  cooldowns: { attack: number; heavyAttack: number; dodge: number };
   stats: FighterStats;
 }
 
@@ -67,11 +63,7 @@ export interface WorldState {
   time: number;
   timeLeft: number;
   arenaRadius: number;
-  chaos: {
-    type: ChaosType;
-    until: number;
-    wind: Vec2;
-  };
+  chaos: { type: ChaosType; until: number; wind: Vec2 };
   fighters: FighterState[];
   weapons: WeaponState[];
   events: MatchEvent[];
@@ -106,11 +98,7 @@ export interface Observation {
   self: FighterObservation;
   enemies: FighterObservation[];
   weapons: WeaponObservation[];
-  arena: {
-    radius: number;
-    chaos: ChaosType;
-    wind: Vec2;
-  };
+  arena: { radius: number; chaos: ChaosType; wind: Vec2 };
   recentEvents: MatchEvent[];
 }
 
@@ -165,16 +153,7 @@ export interface FighterStats {
   timeInCenter: number;
 }
 
-export type MatchEventType =
-  | 'match-start'
-  | 'hit'
-  | 'weapon-pickup'
-  | 'weapon-use'
-  | 'stock-lost'
-  | 'respawn'
-  | 'eliminated'
-  | 'chaos'
-  | 'win';
+export type MatchEventType = 'match-start' | 'hit' | 'weapon-pickup' | 'weapon-use' | 'stock-lost' | 'respawn' | 'eliminated' | 'chaos' | 'win';
 
 export interface MatchEvent {
   id: number;
@@ -192,14 +171,7 @@ export interface MatchSummary {
   seed: number;
   duration: number;
   winnerId?: AgentId;
-  ranking: Array<{
-    id: AgentId;
-    name: string;
-    rank: number;
-    stats: FighterStats;
-    damage: number;
-    stocks: number;
-  }>;
+  ranking: Array<{ id: AgentId; name: string; rank: number; stats: FighterStats; damage: number; stocks: number }>;
   events: MatchEvent[];
 }
 
@@ -210,18 +182,26 @@ export interface EngineTickRecord {
   state: Readonly<WorldState>;
 }
 
+export interface PreparedArenaTick {
+  tick: number;
+  time: number;
+  observations: Readonly<Record<AgentId, Readonly<Observation>>>;
+}
+
+export type ExternalActionSet = Readonly<Record<AgentId, Action | null | undefined>> | ReadonlyMap<AgentId, Action | null | undefined>;
+
 export interface EngineOptions {
   runtime?: ControllerRuntime;
   onTick?: (record: EngineTickRecord) => void;
 }
 
-export interface EngineSnapshot {
-  state: Readonly<WorldState>;
-}
+export interface EngineSnapshot { state: Readonly<WorldState> }
 
 export interface ArenaEngine {
   getState(): Readonly<WorldState>;
   getConfig(): Readonly<ArenaConfig>;
+  prepareTick(): PreparedArenaTick | null;
+  resolvePreparedTick(actions: ExternalActionSet): Readonly<WorldState>;
   step(): Readonly<WorldState>;
   run(maxTicks?: number): Readonly<WorldState>;
   getSummary(): MatchSummary | null;
