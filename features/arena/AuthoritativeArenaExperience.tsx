@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { headlessDefaultAgents } from '@/agents/headless-default-agents';
 import { createArenaViewModel, createMatchSession } from '@/features/renderers/types';
 import type { ArenaViewModel } from '@/features/renderers/types';
-import ThreeArenaViewport from './ThreeArenaViewport';
+import AdaptiveThreeArenaViewport from './AdaptiveThreeArenaViewport';
+import { ArenaAudio } from './ArenaAudio';
 import styles from './AuthoritativeArenaExperience.module.css';
 
 const TICK_MS = 1000 / 30;
@@ -29,8 +30,11 @@ export default function AuthoritativeArenaExperience() {
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [selectedFighterId, setSelectedFighterId] = useState<string>();
+  const [audioEnabled, setAudioEnabled] = useState(false);
   const accumulator = useRef(0);
   const lastFrame = useRef<number | null>(null);
+  const audioRef = useRef<ArenaAudio | null>(null);
+  const lastAudioEventId = useRef(-1);
 
   useEffect(() => session.subscribe((state) => setView(createArenaViewModel(state))), [session]);
 
@@ -54,9 +58,29 @@ export default function AuthoritativeArenaExperience() {
     };
   }, [playing, session, speed, view.winnerId]);
 
+  useEffect(() => {
+    if (!audioEnabled) return;
+    const latest = view.events[view.events.length - 1];
+    if (!latest || latest.id === lastAudioEventId.current) return;
+    lastAudioEventId.current = latest.id;
+    audioRef.current?.play(latest);
+  }, [audioEnabled, view.events]);
+
+  useEffect(() => () => audioRef.current?.dispose(), []);
+
+  const toggleAudio = async () => {
+    if (audioEnabled) {
+      setAudioEnabled(false);
+      return;
+    }
+    const audio = audioRef.current ?? new ArenaAudio();
+    audioRef.current = audio;
+    await audio.enable();
+    setAudioEnabled(true);
+  };
+
   const restart = () => window.location.reload();
   const progress = Math.max(0, Math.min(1, 1 - view.timeLeft / MATCH_SECONDS));
-  const leader = [...view.fighters].sort((a, b) => b.stocks - a.stocks || a.damage - b.damage)[0];
   const latestEvent = view.events[view.events.length - 1];
   const focused = view.fighters.find((fighter) => fighter.id === selectedFighterId);
 
@@ -78,6 +102,7 @@ export default function AuthoritativeArenaExperience() {
           <button className={styles.primaryControl} onClick={() => setPlaying((value) => !value)}>{playing ? 'Ⅱ PAUSE' : '▶ RESUME'}</button>
           <div className={styles.speedGroup}>{[1, 2, 4].map((value) => <button key={value} className={speed === value ? styles.active : ''} onClick={() => setSpeed(value)}>{value}×</button>)}</div>
           <button onClick={() => setSelectedFighterId(undefined)}>{selectedFighterId ? '◎ OVERVIEW' : '◎ AUTO CAM'}</button>
+          <button onClick={() => void toggleAudio()}>{audioEnabled ? '🔊 SFX' : '🔇 SFX'}</button>
           <button onClick={restart}>↻ RESET</button>
         </div>
       </header>
@@ -129,7 +154,7 @@ export default function AuthoritativeArenaExperience() {
             <b>{focused ? `FOLLOWING ${focused.name.toUpperCase()}` : view.chaos === 'none' ? 'AUTO DIRECTOR' : `${view.chaos.toUpperCase()} EVENT ACTIVE`}</b>
           </div>
           <div className={styles.viewport}>
-            <ThreeArenaViewport view={view} selectedFighterId={selectedFighterId} />
+            <AdaptiveThreeArenaViewport view={view} selectedFighterId={selectedFighterId} />
             <div className={styles.vignette} /><div className={styles.scanlines} />
             <div className={styles.cornerTL} /><div className={styles.cornerTR} /><div className={styles.cornerBL} /><div className={styles.cornerBR} />
             <div className={styles.arenaBadge}><small>COMBAT ZONE</small><strong>THE FORGE</strong><span>RADIUS {view.radius.toFixed(1)}M</span></div>
@@ -137,7 +162,7 @@ export default function AuthoritativeArenaExperience() {
             {view.winnerId && <div className={styles.winnerOverlay}><small>SIMULATION COMPLETE</small><strong>{view.fighters.find((fighter) => fighter.id === view.winnerId)?.name ?? view.winnerId}</strong><span>VICTORIOUS AGENT</span><button onClick={restart}>RUN REMATCH</button></div>}
           </div>
           <div className={styles.progressTrack}><i style={{ width: `${progress * 100}%` }} /></div>
-          <div className={styles.stageFooter}><span>01 · SAME SNAPSHOT</span><span>02 · COLLECT ACTIONS</span><span>03 · RESOLVE TOGETHER</span><b>THREE.JS · POST FX · CAMERA DIRECTOR</b></div>
+          <div className={styles.stageFooter}><span>01 · SAME SNAPSHOT</span><span>02 · COLLECT ACTIONS</span><span>03 · RESOLVE TOGETHER</span><b>ADAPTIVE THREE.JS · POST FX · EVENT SFX</b></div>
         </section>
 
         <aside className={styles.rightRail}>
@@ -153,7 +178,7 @@ export default function AuthoritativeArenaExperience() {
               {!view.events.length && <div className={styles.empty}>Waiting for first contact…</div>}
             </div>
           </div>
-          <div className={styles.rulePanel}><div className={styles.railLabel}>EVALUATION CONTRACT</div><p><i /> Controller source stays locked once combat starts.</p><p><i /> Every agent receives the same authoritative snapshot.</p><p><i /> Camera, particles and post FX own zero combat rules.</p></div>
+          <div className={styles.rulePanel}><div className={styles.railLabel}>EVALUATION CONTRACT</div><p><i /> Controller source stays locked once combat starts.</p><p><i /> Every agent receives the same authoritative snapshot.</p><p><i /> Camera, particles, post FX and SFX own zero combat rules.</p></div>
         </aside>
       </section>
 
