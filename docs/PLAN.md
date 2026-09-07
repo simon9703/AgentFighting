@@ -2,9 +2,73 @@
 
 ## Theme
 
-**Submission Platform + Scalable Evaluation + Presentation Polish**
+**Submission Platform + Scalable Evaluation + Spectator-Grade Three.js Presentation**
 
-v1 proved the architecture and local tournament loop. v2 should make that loop usable for real user-supplied controllers without weakening determinism, fairness or renderer separation.
+v1 proved the authoritative architecture and local tournament loop. v2 turns that loop into a usable controller experimentation platform while making behavior visibly understandable and entertaining to watch.
+
+The presentation goal is no longer a minimal dashboard. The default live renderer is now **Three.js**, inspired by polished browser arcade projects such as `turbo-kart-rush`: a strong 3D scene, readable HUD, camera language, particles and effects layered over authoritative simulation data.
+
+Three.js remains an implementation detail of presentation. The engine, tournament pipeline and replay format stay renderer-agnostic.
+
+## Current focus — Presentation Phase 2
+
+### Goal
+
+Make the live arena immediately communicate movement, combat, weapons, chaos and agent intent without requiring the event log.
+
+### Completed
+
+- Three.js live arena viewport replaces the old DOM/CSS pseudo-arena.
+- Low-poly fighter presentation with lighting, shadows, fog and arena geometry.
+- Dynamic spectator camera with framing based on fighter spread.
+- Camera shake for significant combat events.
+- Dedicated presentation-only `ArenaFx` particle system.
+- Movement trails for fast fighters.
+- Hit / weapon / stock-loss / elimination burst effects.
+- Weapon pickups rendered as animated 3D objects.
+- Agent intent rings derived from controller-provided short intent labels.
+- Chaos changes arena/rim lighting without modifying simulation rules.
+- React HUD remains separate from WebGL rendering.
+
+### Next visual work
+
+1. Attack readability
+   - anticipation flash
+   - attack arc / aim direction
+   - heavy-attack wind-up
+   - dodge burst
+   - shield field
+   - push-gun projectile/tracer
+   - bomb fuse/explosion staging
+2. Camera language
+   - overview / combat-focus modes
+   - short KO emphasis
+   - selected-fighter follow mode
+   - replay highlight camera presets
+3. Environment
+   - richer arena silhouettes
+   - ramps/platforms where engine rules support them
+   - animated hazard presentation
+   - chaos-specific environment treatment
+4. Post effects
+   - subtle bloom
+   - vignette
+   - hit flash
+   - restrained chromatic/energy distortion for major events
+5. AI behavior visualization
+   - target indicator
+   - recent intent changes
+   - short planned-direction vector from action/velocity data
+   - selected fighter tactical overlay
+   - no chain-of-thought display
+
+### Acceptance criteria
+
+- a viewer can identify major combat events without reading raw logs
+- effects are derived only from immutable state/events/actions
+- no Three.js code determines damage, collision, stocks, weapons or winner state
+- visual intensity remains readable on mobile and does not obscure agents
+- the live and replay renderers can share the same presentation primitives
 
 ## Milestone 1 — Controller Submission Workspace
 
@@ -15,11 +79,7 @@ Let a user create or paste a complete `ControllerSubmission`, validate it before
 ### Work
 
 - Add `/submit` or a submission panel inside Tournament Lab.
-- Editable fields:
-  - agent id
-  - model label
-  - strategy manifest
-  - JavaScript source
+- Editable fields: agent id, model label, strategy manifest and JavaScript source.
 - Parse through the canonical Zod schema.
 - Run source policy validation before execution.
 - Show violations with rule/message and source context where practical.
@@ -71,12 +131,7 @@ Run long multi-seed tournaments without blocking the UI.
 
 - Move tournament orchestration into a dedicated Worker.
 - Support configurable seed lists/ranges.
-- Emit progress events:
-  - queued
-  - running match N/M
-  - partial aggregate
-  - completed
-  - failed/cancelled
+- Emit queued/running/partial/completed/failed/cancelled progress events.
 - Allow user cancellation.
 - Update rankings/fingerprints incrementally where safe.
 - Avoid storing unnecessary duplicate state in the UI thread.
@@ -101,20 +156,15 @@ Make tournament evidence reusable after the page/session ends.
 - Open imported artifacts directly in replay/tournament inspection mode.
 - Add local persistence using IndexedDB or a small storage adapter.
 - Define a storage interface that can later be backed by a server.
-- Improve replay controls:
-  - play/pause
-  - speed
-  - jump to event
-  - next/previous highlight
-  - event filters
-  - selected fighter focus
-- Add share/export metadata without making presentation data authoritative.
+- Improve replay controls: play/pause, speed, jump to event, highlight navigation, event filters and selected-fighter focus.
+- Reuse Three.js presentation primitives in replay mode rather than maintaining a visually separate replay system.
 
 ### Acceptance criteria
 
 - exported artifact can be imported into a fresh browser session
 - imported artifact produces the same rankings/replay data
 - replay can be navigated without rerunning controllers
+- live and replay views remain visually consistent
 
 ## Milestone 5 — Production Sandbox Architecture
 
@@ -126,105 +176,95 @@ Design the path for accepting hostile public submissions safely.
 
 - Specify a server runtime protocol compatible with the controller action contract.
 - Evaluate process/container/VM isolation options.
-- Define quotas for:
-  - startup CPU/time
-  - per-tick CPU/time
-  - memory
-  - output size
-  - filesystem
-  - network
+- Define startup/per-tick CPU, memory, output, filesystem and network quotas.
 - Add admission validation and source-size limits.
 - Define runtime crash/timeout telemetry.
 - Keep authoritative engine execution separate from sandbox implementation details.
 
 ### Acceptance criteria
 
-- architecture document clearly distinguishes browser isolation from hostile multi-tenant isolation
+- browser isolation is clearly distinguished from hostile multi-tenant isolation
 - no public deployment claims `new Function` or browser Worker alone is a secure sandbox
 - resource limits and fallback semantics are explicit
 
-## Milestone 6 — Combat Readability and Visual Polish
+## Milestone 6 — Spectator and Replay Polish
 
 ### Goal
 
-Make matches easier and more entertaining to watch without moving rules into the renderer.
+Turn presentation primitives into a coherent spectator system rather than isolated effects.
 
 ### Work
 
-Derive effects from authoritative state/events:
-
 ```text
-attack event/state
-→ anticipation/trail
-→ hit event
-→ impact flash
-→ knockback streak
-
-stock-lost / eliminated
-→ arena pulse
-→ elimination effect
-→ scoreboard emphasis
-
-chaos event
-→ environment transition
-
-weapon pickup/use
-→ pickup/use effect
+authoritative state/events/actions
+        ↓
+renderer view model
+        ↓
+Three.js arena + ArenaFx + camera director
+        ↓
+React HUD / timeline / replay controls
 ```
 
-Also improve:
+Add:
 
+- shared camera director
+- shared event-to-effect mapping
+- replay highlight shots
 - selected fighter focus
 - intent readability
 - event feed hierarchy
-- mobile layout
 - match-end presentation
-- replay/live visual consistency
+- mobile visual quality tiers
 
 ### Acceptance criteria
 
-- renderer effects are entirely derived from immutable state/events
-- no combat outcome is decided by animation code
-- major events are understandable without reading raw logs
+- renderer effects are deterministic enough for debugging but never authoritative
+- major events have consistent visual language across live/replay
+- presentation modules are reusable instead of accumulating logic in one component
 
-## Milestone 7 — New Modes and Renderers
+## Milestone 7 — New Modes and Arenas
 
-Only begin after milestones 1–4 are stable.
+Only begin after submission + Worker + artifact/replay foundations are stable.
 
 Possible work:
 
 - alternative arena layouts
 - team mode
 - objective/control-point mode
-- richer 2D/Pixi renderer
-- optional 3D renderer
-- spectator camera modes
+- hazards with meaningful strategic trade-offs
+- multiple Three.js arena themes
+- optional alternate renderer experiments
 
 Any new mode should first prove that it creates meaningful controller trade-offs.
 
-## Explicit non-goals for the next phase
+## Explicit non-goals
 
-Do not prioritize these before the platform path works:
+Do not prioritize:
 
-- large weapon catalogs
-- cosmetic skins
-- many maps with identical strategy
+- cosmetic skin catalogs
+- dozens of weapons without strategic purpose
+- many visually different maps with identical mechanics
 - model leaderboard claims
 - real-time LLM calls during a match
-- renderer-specific physics rules
-- rewriting the engine in another framework
+- renderer-specific physics or collision rules
+- rewriting the authoritative engine around Three.js
+- exposing hidden model chain-of-thought
 
 ## Recommended implementation order
 
 ```text
+NOW: Three.js Presentation Phase 2
+  ↓
 1. Submission Workspace
 2. External Worker evaluation path
 3. Tournament Worker
-4. Artifact import + replay persistence
+4. Artifact import + Three.js replay
 5. Production sandbox design
-6. Visual polish
-7. New modes/renderers
+6. Spectator polish / post FX / camera director
+7. New modes and arenas
 ```
+
+Visual work may continue in parallel when it does not change engine contracts.
 
 ## v2 success condition
 
@@ -239,13 +279,15 @@ lock exact identities
         ↓
 run a non-blocking seeded tournament
         ↓
-watch progress and results
+watch agents fight in a readable Three.js arena
+        ↓
+see intent, movement, weapons and major decisions visually
         ↓
 inspect behavior + replay + highlights
         ↓
-export the evidence
+export evidence
         ↓
-reload/import it later without rerunning the controllers
+reload/import it later without rerunning controllers
 ```
 
-When that works cleanly, AgentFighting becomes a controller experimentation platform rather than only a local showcase.
+At that point AgentFighting is both a controller experimentation platform and a compelling visual explanation of autonomous behavior.
