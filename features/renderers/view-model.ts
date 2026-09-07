@@ -16,12 +16,21 @@ export interface FighterViewModel {
   intent: string;
 }
 
+export interface WeaponViewModel {
+  id: string;
+  type: WeaponType;
+  x: number;
+  z: number;
+  available: boolean;
+}
+
 export interface ArenaViewModel {
   tick: number;
   timeLeft: number;
   radius: number;
   chaos: ChaosType;
   fighters: FighterViewModel[];
+  weapons: WeaponViewModel[];
   events: MatchEvent[];
   winnerId?: string;
 }
@@ -49,6 +58,13 @@ export function createArenaViewModel(state: Readonly<WorldState>): ArenaViewMode
       respawning: fighter.respawnFor > 0,
       weapon: fighter.weapon,
       intent: fighter.intent,
+    })),
+    weapons: state.weapons.map((weapon) => ({
+      id: weapon.id,
+      type: weapon.type,
+      x: weapon.position.x,
+      z: weapon.position.z,
+      available: weapon.available,
     })),
   };
 }
