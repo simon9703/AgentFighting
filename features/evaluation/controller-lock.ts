@@ -15,6 +15,7 @@ export const controllerLockSchema = z.object({
   schemaVersion: z.literal(CONTROLLER_LOCK_SCHEMA_VERSION),
   engineVersion: z.string().min(1),
   lockedAt: z.string().datetime(),
+  lockHash: z.string().min(1),
   controllers: z.array(lockedControllerSchema).min(2),
 });
 
@@ -46,10 +47,17 @@ export function createControllerLock(
     };
   }).sort((a, b) => a.agentId.localeCompare(b.agentId));
 
+  const lockHash = createSourceHash(JSON.stringify({
+    schemaVersion: CONTROLLER_LOCK_SCHEMA_VERSION,
+    engineVersion,
+    controllers,
+  }));
+
   return controllerLockSchema.parse({
     schemaVersion: CONTROLLER_LOCK_SCHEMA_VERSION,
     engineVersion,
     lockedAt,
+    lockHash,
     controllers,
   });
 }
