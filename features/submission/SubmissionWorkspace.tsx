@@ -34,10 +34,31 @@ function parseDraft(draft: Draft) {
   return { submission: parsed?.success ? parsed.data : null, issues: [...(strategyError ? [`strategy: ${strategyError}`] : []), ...schemaIssues, ...policyIssues.map((issue) => `${issue.rule}: ${issue.message}`)] };
 }
 
+function parseSeeds(value: string): { seeds: number[]; error?: string } {
+  const input = value.trim();
+  if (!input) return { seeds: [], error: 'Enter one or more seeds.' };
+  const range = input.match(/^(\d+)\s*-\s*(\d+)$/);
+  let seeds: number[];
+  if (range) {
+    const start = Number(range[1]);
+    const end = Number(range[2]);
+    if (end < start) return { seeds: [], error: 'Seed range end must be greater than or equal to start.' };
+    seeds = Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  } else {
+    seeds = input.split(/[\s,]+/).filter(Boolean).map(Number);
+  }
+  if (seeds.some((seed) => !Number.isSafeInteger(seed) || seed < 0)) return { seeds: [], error: 'Seeds must be non-negative integers.' };
+  seeds = [...new Set(seeds)];
+  if (!seeds.length) return { seeds: [], error: 'Enter one or more seeds.' };
+  if (seeds.length > 100) return { seeds: [], error: 'Browser tournaments are currently capped at 100 seeds.' };
+  return { seeds };
+}
+
 export default function SubmissionWorkspace() {
   const [drafts, setDrafts] = useState<Draft[]>(() => sampleControllerSubmissions.map(toDraft));
   const [selectedKey, setSelectedKey] = useState<string>(() => drafts[0]?.key ?? '');
   const [locked, setLocked] = useState(false);
+  const [seedSpec, setSeedSpec] = useState('11, 23, 37, 51, 79');
   const [progress, setProgress] = useState<BrowserEvaluationProgress | null>(null);
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'complete' | 'error'>('idle');
   const [runMessage, setRunMessage] = useState('');
@@ -47,6 +68,7 @@ export default function SubmissionWorkspace() {
   const analyses = useMemo(() => drafts.map((draft) => ({ draft, ...parseDraft(draft) })), [drafts]);
   const selectedAnalysis = analyses.find((entry) => entry.draft.key === selected?.key);
   const allValid = analyses.length >= 2 && analyses.every((entry) => entry.submission && entry.issues.length === 0);
+  const seedConfig = useMemo(() => parseSeeds(seedSpec), [seedSpec]);
 
   const patchSelected = (patch: Partial<Draft>) => {
     if (!selected || locked) return;
@@ -83,39 +105,51 @@ export default function SubmissionWorkspace() {
   };
 
   const runEvaluation = () => {
-    if (!allValid || !locked || runStatus === 'running') return;
+    if (!allValid || !locked || runStatus === 'running' || seedConfig.error) return;
     setRunStatus('running');
-    setRunMessage('Starting tournament worker…');
+    setProgress(null);
+    setRunMessage(`Starting ${seedConfig.seeds.length}-seed tournament worker…`);
     const run = runTournamentInWorker({
       submissions: submissions(),
-      seeds: [11, 23, 37, 51, 79],
+      seeds: seedConfig.seeds,
       engineVersion: '0.1.0',
       startupTimeoutMs: 1000,
       perTickTimeoutMs: 20,
     }, (next) => {
       setProgress(next);
-      setRunMessage(next.phase === 'match' ? `Seed ${next.seed} · tick ${next.tick ?? 0} · match ${next.matchIndex + 1}/${next.matchCount}` : next.phase.toUpperCase());
+      if (next.phase === 'match') {
+        const slowest = Object.entries(next.durationsMs ?? {}).sort((a, b) => b[1] - a[1])[0];
+        setRunMessage(`Seed ${next.seed} · tick ${next.tick ?? 0} · match ${next.matchIndex + 1}/${next.matchCount}${slowest ? ` · slowest ${slowest[0]} ${slowest[1].toFixed(1)}ms` : ''}`);
+      } else if (next.phase === 'match-complete') {
+        const leader = next.partialTournament?.agents[0];
+        setRunMessage(`Match ${next.matchIndex + 1}/${next.matchCount} complete${leader ? ` · leader ${leader.name} ${Math.round(leader.winRate * 100)}%` : ''}`);
+      } else setRunMessage(next.phase.toUpperCase());
     });
     activeRun.current = run;
     void run.promise.then(async (result) => {
       await saveTournamentArtifact(result.artifact);
+      const timeoutCount = Object.values(result.diagnostics.timedOut).reduce((sum, count) => sum + count, 0);
+      const failureCount = Object.values(result.diagnostics.failed).reduce((sum, count) => sum + count, 0);
+      const slowest = Object.entries(result.diagnostics.latency).sort((a, b) => b[1].averageMs - a[1].averageMs)[0];
       setRunStatus('complete');
-      setRunMessage(`Completed ${result.records.length} matches · evidence saved locally. Open Tournament Lab to inspect the Three.js replay.`);
+      setRunMessage(`Completed ${result.records.length} matches · ${timeoutCount} timeouts · ${failureCount} failures${slowest ? ` · slowest avg ${slowest[0]} ${slowest[1].averageMs.toFixed(2)}ms` : ''}. Evidence saved locally.`);
     }).catch((error) => {
       setRunStatus('error');
       setRunMessage(error instanceof Error ? error.message : String(error));
     }).finally(() => { activeRun.current = null; });
   };
 
-  const cancelEvaluation = () => {
-    activeRun.current?.cancel();
-    activeRun.current = null;
-  };
+  const cancelEvaluation = () => { activeRun.current?.cancel(); activeRun.current = null; };
+  const progressPercent = progress?.phase === 'match'
+    ? Math.min(100, ((progress.matchIndex + (progress.tick ?? 0) / (90 * 30)) / progress.matchCount) * 100)
+    : progress?.phase === 'match-complete'
+      ? ((progress.matchIndex + 1) / progress.matchCount) * 100
+      : progress?.phase === 'completed' ? 100 : 0;
 
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
-        <div><div className={styles.eyebrow}>AGENT FIGHTING / SUBMISSION WORKSPACE</div><h1>Write strategies. Validate source. Lock exact identities.</h1><p>Each locked controller runs in its own Worker; tournament orchestration runs in a separate Worker and resolves actions through the authoritative engine.</p></div>
+        <div><div className={styles.eyebrow}>AGENT FIGHTING / SUBMISSION WORKSPACE</div><h1>Write strategies. Validate source. Lock exact identities.</h1><p>Each locked controller runs in its own Worker; a dedicated Tournament Worker streams progress and partial rankings while the authoritative engine resolves every tick.</p></div>
         <div className={styles.nav}><Link href="/">Live arena</Link><Link href="/tournament">Tournament Lab</Link></div>
       </header>
 
@@ -136,14 +170,22 @@ export default function SubmissionWorkspace() {
           <div className={`${styles.validity} ${selectedAnalysis?.issues.length?styles.invalid:styles.valid}`}><strong>{selectedAnalysis?.issues.length?'NEEDS ATTENTION':'VALID'}</strong><span>{selectedAnalysis?.issues.length??0} issue(s)</span></div>
           <div className={styles.issueList}>{selectedAnalysis?.issues.map((issue)=><p key={issue}>{issue}</p>)}{!selectedAnalysis?.issues.length&&<p className={styles.ok}>Schema and source policy passed.</p>}</div>
           {selectedAnalysis?.submission&&<div className={styles.hashes}><span>SOURCE HASH</span><code>{createSourceHash(selectedAnalysis.submission.source)}</code><span>CONTROLLER ID</span><code>{createControllerId(selectedAnalysis.submission)}</code></div>}
+
+          <div className={styles.seedConfig}>
+            <span>TOURNAMENT SEEDS · max 100</span>
+            <input value={seedSpec} disabled={runStatus==='running'} onChange={(event)=>setSeedSpec(event.target.value)} placeholder="11, 23, 37 or 1-50"/>
+            <div><button onClick={()=>setSeedSpec('11, 23, 37, 51, 79')}>5 demo</button><button onClick={()=>setSeedSpec('1-20')}>20 seeds</button><button onClick={()=>setSeedSpec('1-50')}>50 seeds</button><button onClick={()=>setSeedSpec('1-100')}>100 seeds</button></div>
+            <small className={seedConfig.error?styles.seedError:''}>{seedConfig.error??`${seedConfig.seeds.length} deterministic match seeds`}</small>
+          </div>
+
           <div className={styles.lockBox}>
             <small>{locked?'LOCKED WORKSPACE':`${analyses.filter((entry)=>!entry.issues.length).length}/${analyses.length} READY`}</small>
             <button disabled={runStatus==='running'||(!allValid&&!locked)} onClick={()=>setLocked((value)=>!value)}>{locked?'Unlock edits':'Lock exact submissions'}</button>
             <button disabled={!allValid||runStatus==='running'} onClick={exportBundle}>Export submissions</button>
-            <button disabled={!allValid||!locked||runStatus==='running'} onClick={runEvaluation}>Run isolated tournament</button>
+            <button disabled={!allValid||!locked||runStatus==='running'||Boolean(seedConfig.error)} onClick={runEvaluation}>Run isolated tournament</button>
             {runStatus==='running'&&<button onClick={cancelEvaluation}>Cancel tournament</button>}
           </div>
-          {runStatus!=='idle'&&<div className={`${styles.runStatus} ${runStatus==='error'?styles.runError:runStatus==='complete'?styles.runComplete:''}`}><strong>{runStatus.toUpperCase()}</strong><span>{runMessage}</span>{progress?.phase==='match'&&<i style={{width:`${Math.min(100,((progress.matchIndex+(progress.tick??0)/(90*30))/progress.matchCount)*100)}%`}}/>}</div>}
+          {runStatus!=='idle'&&<div className={`${styles.runStatus} ${runStatus==='error'?styles.runError:runStatus==='complete'?styles.runComplete:''}`}><strong>{runStatus.toUpperCase()}</strong><span>{runMessage}</span><i style={{width:`${progressPercent}%`}}/></div>}
           <p className={styles.note}>The UI lock prevents accidental edits; evaluation independently creates the canonical ControllerLock. Browser Workers provide fault isolation, not hostile multi-tenant security.</p>
         </aside>
       </section>
