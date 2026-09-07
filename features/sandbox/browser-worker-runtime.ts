@@ -25,16 +25,9 @@ self.onmessage = async (event) => {
 };
 `;
 
-export interface BrowserWorkerRuntimeOptions {
-  startupTimeoutMs?: number;
-}
+export interface BrowserWorkerRuntimeOptions { startupTimeoutMs?: number }
 
-/**
- * Browser isolation boundary for controller code. It is intentionally separate
- * from trusted in-process compilation. A production public service should still
- * prefer a server-side process/container boundary when strict memory accounting
- * and stronger anti-evasion guarantees are required.
- */
+/** Browser fault-isolation boundary for controller code. Not a hardened hostile multi-tenant sandbox. */
 export class BrowserWorkerControllerRuntime implements AsyncControllerRuntime {
   private worker: Worker | null = null;
   private nextRequestId = 0;
@@ -54,14 +47,15 @@ export class BrowserWorkerControllerRuntime implements AsyncControllerRuntime {
       const worker = new Worker(url, { name: 'agent-fighting-controller' });
       URL.revokeObjectURL(url);
       this.worker = worker;
-      const timer = window.setTimeout(() => {
+      const timer = globalThis.setTimeout(() => {
         worker.terminate();
+        this.worker = null;
         reject(new Error('Controller worker startup timed out'));
       }, this.options.startupTimeoutMs ?? 1000);
       worker.onmessage = (event: MessageEvent) => {
         const message = event.data as { type: string; requestId?: number; action?: Action; message?: string };
         if (message.type === 'ready') {
-          window.clearTimeout(timer);
+          globalThis.clearTimeout(timer);
           resolve();
           return;
         }
@@ -92,6 +86,7 @@ export class BrowserWorkerControllerRuntime implements AsyncControllerRuntime {
   dispose() {
     this.worker?.terminate();
     this.worker = null;
+    this.ready = null;
     for (const request of this.pending.values()) request.reject(new Error('Controller worker disposed'));
     this.pending.clear();
   }
