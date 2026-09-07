@@ -11,3 +11,5 @@ export interface ArenaRenderer {
 // but must never mutate combat rules, damage, stocks, chaos, or winner state.
 export { createMatchSession } from './match-session';
 export type { MatchSession } from './match-session';
+export { createArenaViewModel } from './view-model';
+export type { ArenaViewModel, FighterViewModel } from './view-model';
