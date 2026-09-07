@@ -3,22 +3,30 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { ArenaViewModel } from '@/features/renderers/types';
+import { ArenaFx } from './ArenaFx';
 
-type Props = {
-  view: ArenaViewModel;
-};
+type Props = { view: ArenaViewModel };
 
 type FighterVisual = {
   root: THREE.Group;
   body: THREE.Mesh;
   glow: THREE.Mesh;
+  intentRing: THREE.Mesh;
   target: THREE.Vector3;
   velocity: THREE.Vector3;
+  lastPosition: THREE.Vector3;
+  color: THREE.Color;
+};
+
+type WeaponVisual = {
+  root: THREE.Group;
+  halo: THREE.Mesh;
 };
 
 const ARENA_SCALE = 0.86;
 
-function makeRobot(color: string) {
+function makeRobot(colorValue: string) {
+  const color = new THREE.Color(colorValue);
   const root = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({ color, roughness: 0.28, metalness: 0.7 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x11141b, roughness: 0.5, metalness: 0.5 });
@@ -54,7 +62,55 @@ function makeRobot(color: string) {
   glow.position.y = 0.04;
   root.add(glow);
 
-  return { root, body, glow };
+  const intentRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.95, 0.028, 8, 48, Math.PI * 1.35),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45 }),
+  );
+  intentRing.rotation.x = Math.PI / 2;
+  intentRing.position.y = 2.15;
+  root.add(intentRing);
+
+  return { root, body, glow, intentRing, color };
+}
+
+function makeWeapon(type: string) {
+  const root = new THREE.Group();
+  const color = type === 'bomb' ? 0xff6a6a : type === 'shield' ? 0x6ae4ff : type === 'hammer' ? 0xffd46a : 0xc68cff;
+  const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.85, roughness: 0.3, metalness: 0.65 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x151820, roughness: 0.55, metalness: 0.5 });
+
+  if (type === 'hammer') {
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.8, 8), dark);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.24, 0.26), material);
+    head.position.y = 0.46;
+    root.add(handle, head);
+  } else if (type === 'shield') {
+    const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.12, 24), material);
+    shield.rotation.x = Math.PI / 2;
+    root.add(shield);
+  } else if (type === 'bomb') {
+    root.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 1), material));
+  } else {
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.7, 10), material);
+    barrel.rotation.z = Math.PI / 2;
+    root.add(barrel);
+  }
+
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(0.46, 0.62, 30),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, side: THREE.DoubleSide }),
+  );
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.y = -0.4;
+  root.add(halo);
+  return { root, halo };
+}
+
+function eventColor(type: string) {
+  if (type === 'eliminated' || type === 'stock-lost') return 0xff625f;
+  if (type === 'weapon-use' || type === 'weapon-pickup') return 0xffd66b;
+  if (type === 'chaos') return 0xb67cff;
+  return 0x8af4ff;
 }
 
 export default function ThreeArenaViewport({ view }: Props) {
@@ -67,7 +123,7 @@ export default function ThreeArenaViewport({ view }: Props) {
     if (!mount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x05070c);
+    scene.background = new THREE.Color(0x04060b);
     scene.fog = new THREE.FogExp2(0x07101b, 0.032);
 
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
@@ -78,11 +134,10 @@ export default function ThreeArenaViewport({ view }: Props) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.16;
     mount.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight(0x79c8ff, 0x090b10, 1.7);
-    scene.add(hemi);
+    scene.add(new THREE.HemisphereLight(0x79c8ff, 0x090b10, 1.7));
     const key = new THREE.DirectionalLight(0xffffff, 3.2);
     key.position.set(-8, 18, 10);
     key.castShadow = true;
@@ -103,10 +158,8 @@ export default function ThreeArenaViewport({ view }: Props) {
     floor.position.y = -0.42;
     world.add(floor);
 
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(8.85, 9.25, 72),
-      new THREE.MeshBasicMaterial({ color: 0x56e1ff, transparent: true, opacity: 0.48, side: THREE.DoubleSide }),
-    );
+    const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x56e1ff, transparent: true, opacity: 0.48, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(8.85, 9.25, 72), ringMaterial);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.01;
     world.add(ring);
@@ -144,32 +197,15 @@ export default function ThreeArenaViewport({ view }: Props) {
     }
 
     const fighterVisuals = new Map<string, FighterVisual>();
-    const fxGroup = new THREE.Group();
-    scene.add(fxGroup);
+    const weaponVisuals = new Map<string, WeaponVisual>();
+    const fx = new ArenaFx();
+    scene.add(fx.group);
     let lastEventId = -1;
     let shake = 0;
 
-    const spawnImpact = (x: number, z: number, color = 0xffffff) => {
-      const geometry = new THREE.RingGeometry(0.15, 0.23, 24);
-      const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.set(x, 0.12, z);
-      fxGroup.add(mesh);
-      const born = performance.now();
-      const animate = () => {
-        const t = (performance.now() - born) / 420;
-        if (t >= 1) {
-          fxGroup.remove(mesh);
-          geometry.dispose();
-          material.dispose();
-          return;
-        }
-        mesh.scale.setScalar(1 + t * 8);
-        material.opacity = 0.9 * (1 - t);
-        requestAnimationFrame(animate);
-      };
-      requestAnimationFrame(animate);
+    const worldPosition = (x: number, z: number, radius: number, y = 0) => {
+      const scale = radius > 0 ? 8.25 / radius : 1;
+      return new THREE.Vector3(x * scale * ARENA_SCALE, y, z * scale * ARENA_SCALE);
     };
 
     const syncFighters = () => {
@@ -184,25 +220,50 @@ export default function ThreeArenaViewport({ view }: Props) {
             root: robot.root,
             body: robot.body,
             glow: robot.glow,
+            intentRing: robot.intentRing,
             target: new THREE.Vector3(),
             velocity: new THREE.Vector3(),
+            lastPosition: new THREE.Vector3(),
+            color: robot.color,
           };
           fighterVisuals.set(fighter.id, visual);
         }
-        const scale = current.radius > 0 ? 8.25 / current.radius : 1;
-        visual.target.set(fighter.x * scale * ARENA_SCALE, 0, fighter.z * scale * ARENA_SCALE);
+        visual.target.copy(worldPosition(fighter.x, fighter.z, current.radius));
         visual.velocity.set(fighter.velocityX, 0, fighter.velocityZ);
         visual.root.visible = !fighter.eliminated;
         visual.root.scale.setScalar(fighter.respawning ? 0.72 : 1);
         visual.body.rotation.z = Math.min(0.18, visual.velocity.length() * 0.015);
-        if (visual.velocity.lengthSq() > 0.01) {
-          visual.root.rotation.y = Math.atan2(visual.velocity.x, visual.velocity.z);
-        }
+        visual.intentRing.visible = Boolean(fighter.intent);
+        const intentMaterial = visual.intentRing.material as THREE.MeshBasicMaterial;
+        intentMaterial.opacity = fighter.intent.toLowerCase().includes('attack') ? 0.9 : 0.42;
+        if (visual.velocity.lengthSq() > 0.01) visual.root.rotation.y = Math.atan2(visual.velocity.x, visual.velocity.z);
       });
       fighterVisuals.forEach((visual, id) => {
         if (!active.has(id)) {
           world.remove(visual.root);
           fighterVisuals.delete(id);
+        }
+      });
+    };
+
+    const syncWeapons = () => {
+      const current = viewRef.current;
+      const active = new Set<string>();
+      current.weapons.forEach((weapon) => {
+        active.add(weapon.id);
+        let visual = weaponVisuals.get(weapon.id);
+        if (!visual) {
+          visual = makeWeapon(weapon.type);
+          world.add(visual.root);
+          weaponVisuals.set(weapon.id, visual);
+        }
+        visual.root.visible = weapon.available;
+        visual.root.position.copy(worldPosition(weapon.x, weapon.z, current.radius, 0.72));
+      });
+      weaponVisuals.forEach((visual, id) => {
+        if (!active.has(id)) {
+          world.remove(visual.root);
+          weaponVisuals.delete(id);
         }
       });
     };
@@ -224,42 +285,74 @@ export default function ThreeArenaViewport({ view }: Props) {
       const dt = Math.min(clock.getDelta(), 0.05);
       const current = viewRef.current;
       syncFighters();
+      syncWeapons();
 
       fighterVisuals.forEach((visual) => {
+        visual.lastPosition.copy(visual.root.position);
         visual.root.position.lerp(visual.target, 1 - Math.pow(0.001, dt));
         visual.glow.rotation.z += dt * 1.8;
+        visual.intentRing.rotation.z -= dt * 1.25;
+        const moved = visual.root.position.distanceTo(visual.lastPosition);
+        if (moved > 0.08 && visual.velocity.length() > 2.4 && Math.random() < 0.32) {
+          fx.trail(visual.lastPosition.clone().setY(0.18), visual.root.position.clone().setY(0.18), visual.color, 0.045, 0.16);
+        }
+      });
+
+      weaponVisuals.forEach((visual) => {
+        visual.root.rotation.y += dt * 1.2;
+        visual.root.position.y = 0.7 + Math.sin(performance.now() * 0.003 + visual.root.position.x) * 0.12;
+        visual.halo.rotation.z += dt * 0.9;
       });
 
       const newest = current.events[current.events.length - 1];
       if (newest && newest.id !== lastEventId) {
         lastEventId = newest.id;
         const subject = current.fighters.find((fighter) => fighter.id === (newest.target ?? newest.actor));
-        if (subject && ['hit', 'weapon-use', 'stock-lost', 'eliminated'].includes(newest.type)) {
-          const scale = current.radius > 0 ? 8.25 / current.radius : 1;
-          spawnImpact(subject.x * scale * ARENA_SCALE, subject.z * scale * ARENA_SCALE, 0xffd66b);
-          shake = newest.type === 'stock-lost' || newest.type === 'eliminated' ? 0.36 : 0.15;
+        if (subject) {
+          const position = worldPosition(subject.x, subject.z, current.radius, 0.35);
+          const color = eventColor(newest.type);
+          if (['hit', 'weapon-use', 'stock-lost', 'eliminated', 'weapon-pickup', 'chaos'].includes(newest.type)) {
+            fx.ring(position, color, newest.type === 'eliminated' ? 0.9 : 0.48, newest.type === 'eliminated' ? 0.7 : 0.34);
+            fx.burst({
+              position: position.clone().setY(newest.type === 'eliminated' ? 1.1 : 0.7),
+              color,
+              count: newest.type === 'eliminated' ? 46 : 18,
+              speed: newest.type === 'eliminated' ? 7 : 4.5,
+              life: newest.type === 'eliminated' ? 0.85 : 0.5,
+              size: newest.type === 'eliminated' ? 1.3 : 1,
+            });
+          }
+          shake = newest.type === 'stock-lost' || newest.type === 'eliminated' ? 0.42 : newest.type === 'hit' ? 0.16 : shake;
         }
       }
 
-      const fighters = [...fighterVisuals.values()];
+      fx.update(dt);
+
+      const fighters = [...fighterVisuals.values()].filter((fighter) => fighter.root.visible);
       const focus = new THREE.Vector3();
       if (fighters.length) {
         fighters.forEach((fighter) => focus.add(fighter.root.position));
         focus.multiplyScalar(1 / fighters.length);
       }
+      const spread = fighters.reduce((max, fighter) => Math.max(max, fighter.root.position.distanceTo(focus)), 0);
       const time = performance.now() * 0.00015;
-      const desired = new THREE.Vector3(14 + Math.sin(time) * 1.4, 15, 18 + Math.cos(time) * 1.4).add(focus.clone().multiplyScalar(0.15));
+      const distanceBoost = Math.min(4.5, spread * 0.35);
+      const desired = new THREE.Vector3(14 + Math.sin(time) * 1.4 + distanceBoost, 15 + distanceBoost * 0.25, 18 + Math.cos(time) * 1.4 + distanceBoost)
+        .add(focus.clone().multiplyScalar(0.15));
       camera.position.lerp(desired, 1 - Math.pow(0.02, dt));
       if (shake > 0.001) {
         camera.position.x += (Math.random() - 0.5) * shake;
         camera.position.y += (Math.random() - 0.5) * shake * 0.5;
         shake *= 0.86;
       }
-      camera.lookAt(focus.x * 0.2, 0.35, focus.z * 0.2);
+      camera.lookAt(focus.x * 0.22, 0.45, focus.z * 0.22);
 
       const danger = current.chaos !== 'none';
-      ring.material instanceof THREE.MeshBasicMaterial && (ring.material.opacity = danger ? 0.82 : 0.48 + Math.sin(performance.now() * 0.003) * 0.08);
-      rim.intensity = danger ? 90 : 65;
+      ringMaterial.opacity = danger ? 0.86 : 0.48 + Math.sin(performance.now() * 0.003) * 0.08;
+      ringMaterial.color.setHex(danger ? 0xb86cff : 0x56e1ff);
+      rim.color.setHex(danger ? 0xc85cff : 0x7c4dff);
+      rim.intensity = danger ? 95 : 65;
+      renderer.toneMappingExposure = danger ? 1.25 : 1.16;
       renderer.render(scene, camera);
     };
     loop();
@@ -267,6 +360,7 @@ export default function ThreeArenaViewport({ view }: Props) {
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
+      fx.dispose();
       mount.removeChild(renderer.domElement);
       renderer.dispose();
       scene.traverse((object) => {
