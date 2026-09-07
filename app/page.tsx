@@ -1,5 +1,5 @@
-import ArenaExperience from '@/features/arena/ArenaExperience';
+import AuthoritativeArenaExperience from '@/features/arena/AuthoritativeArenaExperience';
 
 export default function Home() {
-  return <ArenaExperience />;
+  return <AuthoritativeArenaExperience />;
 }

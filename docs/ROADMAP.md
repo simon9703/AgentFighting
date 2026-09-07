@@ -44,7 +44,19 @@
 ## Presentation
 
 - ☑️ Add a renderer-facing MatchSession that exposes only headless state
-- ☐ Bind the existing prototype renderer to authoritative replay state only
-- ☐ Add a minimal 2D replay inspector for debugging and strategy analysis
+- ☑️ Bind the primary product experience to authoritative MatchSession state only
+- ☑️ Add a responsive 2D/2.5D live arena inspector for strategy debugging
+- ☐ Add replay scrubbing and highlight navigation
 - ☐ Choose the final 2D / 2.5D / 3D viewing experience after engine validation
-- ☐ Add camera, impact, and visual polish only after the strategy loop is stable
+- ☐ Add richer camera, impact, weapon and chaos visual polish without moving rules into presentation
+
+## Product completion gate
+
+The first complete public loop is reached when a user can:
+
+1. select or submit several generated controllers,
+2. lock controller identities and source hashes,
+3. run a reproducible seeded tournament,
+4. watch the authoritative arena without renderer-owned rules,
+5. inspect replay/highlights and behavior fingerprints,
+6. export the full tournament artifact and human-readable report.
