@@ -24,4 +24,6 @@ export type {
   BrowserEvaluateSubmissionsInput,
   BrowserEvaluationProgress,
   BrowserSubmissionTournamentResult,
+  BrowserRuntimeDiagnostics,
+  RuntimeLatencySummary,
 } from './browser-submission-tournament';
