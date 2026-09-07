@@ -111,6 +111,12 @@ features/replay/
   tick/action/event/snapshot recording
   replay/export helpers
 
+features/evaluation/
+  validates locked ControllerSubmissions
+  compiles them at the execution boundary
+  runs many seeded matches
+  returns fingerprints plus replayable records
+
 features/renderers/
   passive renderer contracts
 
@@ -193,6 +199,12 @@ All controller outputs must be sanitized before resolution.
 
 The engine must depend on a `ControllerRuntime` abstraction rather than a specific JavaScript sandbox implementation.
 
+The first local source compiler is deliberately named `compileTrustedControllerSource`.
+It performs policy validation and freezes observations, but `new Function` is **not**
+a security boundary. Never describe it as a safe sandbox. Any externally submitted
+controller must move to a Worker/process runtime with resource limits before it is
+accepted from users.
+
 ## Match records and replay
 
 A replayable match should contain at least:
@@ -236,8 +248,9 @@ Current order of work:
 2. Controller API and execution boundary
 3. deterministic seed/replay/match record
 4. strategy/tournament metrics
-5. generated-controller workflow
-6. renderer integration
-7. final visual polish / 2D vs 3D choice
+5. generated-controller workflow and reproducible batch evaluation
+6. isolated Worker/process runtime for external controller source
+7. renderer integration
+8. final visual polish / 2D vs 3D choice
 
 Do not spend significant time polishing rendering if the headless architecture or controller strategy space is still unstable.

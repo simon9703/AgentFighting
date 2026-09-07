@@ -14,6 +14,8 @@ Important rules:
 - you may keep private memory in the closure returned by createController()
 - return only legal Action fields
 - intent is a short public/debug label, not hidden reasoning
+- source must be self-contained plain JavaScript (not TypeScript or an ES module)
+- source must define createController(); do not call eval, Function, Math.random, Date, timers, network, DOM, or host APIs
 
 You should first choose and declare a strategy manifest, then implement the controller from that strategy. Different reasonable approaches are encouraged; there is intentionally no single prescribed target-selection or risk policy.
 

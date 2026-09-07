@@ -1,11 +1,11 @@
 import { createArenaEngine, type AgentDefinition, type ArenaConfig, type ControllerRuntime } from '@/features/engine';
-import { createInProcessRuntime, createRecordingRuntime, wrapAgentsWithRuntime } from '@/features/sandbox';
+import { createInProcessRuntime, createRecordingRuntime } from '@/features/sandbox';
 import { createReplayRecorder } from './recorder';
 import type { ControllerDescriptor, MatchRecord } from './types';
 
 export interface RunRecordedMatchInput {
   agents: AgentDefinition[];
-  config: ArenaConfig;
+  config?: Partial<ArenaConfig>;
   controllers: ControllerDescriptor[];
   engineVersion: string;
   runtime?: ControllerRuntime;
@@ -15,17 +15,17 @@ export interface RunRecordedMatchInput {
 export function runRecordedMatch(input: RunRecordedMatchInput): MatchRecord {
   const delegate = input.runtime ?? createInProcessRuntime();
   const recordingRuntime = createRecordingRuntime(delegate);
-  const wrappedAgents = wrapAgentsWithRuntime(input.agents, recordingRuntime);
-  const engine = createArenaEngine(wrappedAgents, input.config);
+  const engine = createArenaEngine(input.agents, input.config, { runtime: recordingRuntime });
 
   const recorder = createReplayRecorder({
     engineVersion: input.engineVersion,
-    config: input.config,
+    config: engine.getConfig(),
     controllers: input.controllers,
     initialState: engine.getState(),
   });
 
-  const maxTicks = input.maxTicks ?? Math.ceil(input.config.durationSeconds * input.config.tickRate) + 1;
+  const config = engine.getConfig();
+  const maxTicks = input.maxTicks ?? Math.ceil(config.durationSeconds * config.tickRate) + 1;
   let ticks = 0;
 
   while (engine.getState().phase !== 'finished' && ticks < maxTicks) {

@@ -7,6 +7,7 @@ import type {
   AgentDefinition,
   ArenaConfig,
   ArenaEngine,
+  EngineOptions,
   FighterState,
   FighterStats,
   MatchEvent,
@@ -108,6 +109,7 @@ function buildWeapons(config: ArenaConfig): WeaponState[] {
 export function createArenaEngine(
   agents: AgentDefinition[],
   inputConfig?: Partial<ArenaConfig>,
+  options: EngineOptions = {},
 ): ArenaEngine {
   if (agents.length < 2) throw new Error('Arena requires at least two agents');
 
@@ -378,7 +380,11 @@ export function createArenaEngine(
       if (fighter.eliminated || fighter.respawnFor > 0) continue;
       const controller = controllers.get(fighter.id)!;
       try {
-        actions.set(fighter.id, sanitizeAction(controller.act(createObservation(state, fighter.id))));
+        const observation = createObservation(state, fighter.id);
+        const output = options.runtime
+          ? options.runtime.execute({ agentId: fighter.id, controller, observation })
+          : controller.act(observation);
+        actions.set(fighter.id, sanitizeAction(output));
       } catch {
         actions.set(fighter.id, sanitizeAction(null));
       }
@@ -438,6 +444,12 @@ export function createArenaEngine(
 
     resolveBodyCollisions();
     finishIfNeeded();
+    options.onTick?.({
+      tick: state.tick,
+      time: state.time,
+      actions: Object.fromEntries(actions.entries()),
+      state,
+    });
     return state;
   };
 
@@ -470,6 +482,7 @@ export function createArenaEngine(
 
   return {
     getState: () => state,
+    getConfig: () => config,
     step,
     run: (maxTicks = Math.ceil(config.durationSeconds * config.tickRate) + 1) => {
       let ticks = 0;

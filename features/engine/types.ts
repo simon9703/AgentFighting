@@ -221,6 +221,7 @@ export interface EngineSnapshot {
 
 export interface ArenaEngine {
   getState(): Readonly<WorldState>;
+  getConfig(): Readonly<ArenaConfig>;
   step(): Readonly<WorldState>;
   run(maxTicks?: number): Readonly<WorldState>;
   getSummary(): MatchSummary | null;

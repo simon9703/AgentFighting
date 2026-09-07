@@ -16,7 +16,9 @@ export const controllerSubmissionSchema = z.object({
   agentId: z.string().min(1).max(80),
   model: z.string().min(1).max(120),
   strategy: controllerStrategySchema,
-  source: z.string().min(1),
+  // Source is deliberately JavaScript-only for the first portable runtime.
+  // TypeScript can be added at the submission service boundary later.
+  source: z.string().min(1).max(24_000),
 });
 
 export type ControllerStrategyManifest = z.infer<typeof controllerStrategySchema>;

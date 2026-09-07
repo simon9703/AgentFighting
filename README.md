@@ -52,7 +52,10 @@ features/sandbox/
 features/replay/
   replay schema
   deterministic match recorder
-  recorded headless match runner
+  recorded headless match runner + deterministic verifier
+
+features/evaluation/
+  submission -> validation -> runtime boundary -> seeded tournament
 
 features/renderers/
   passive renderer contracts
@@ -83,6 +86,12 @@ interface AgentController {
 Controllers may keep private memory in their closure but cannot call an LLM again during the match.
 
 A model submission contains both a strategy manifest and source code. The source receives a stable identity/hash so a replay can say exactly which controller participated.
+
+`evaluateControllerSubmissions()` is the local end-to-end entry point: it validates
+locked submissions, runs the same group over many seeds, produces a behavior
+fingerprint, and writes one replayable `MatchRecord` per seed. The current source
+compiler is for trusted local development only; untrusted source still requires an
+isolated Worker/process runtime.
 
 ## Replay
 
