@@ -1,25 +1,116 @@
 # AgentFighting
 
-AI-controlled fighters enter the same dynamic arena with **one generated controller each**. The controller is locked before the match and is called every simulation step with the latest observation.
+AgentFighting is a renderer-agnostic AI behavior arena. Multiple models generate **one controller each**, controllers are locked before the match, and the same code reacts to a changing world every simulation tick.
 
-The goal is not a serious benchmark. The goal is to make model-generated behavior visible, chaotic and fun to watch.
+The goal is not a serious benchmark. The interesting output is emergent behavior: strategy, mistakes, risk-taking, weapon choice, rivalries, recovery and chaos.
 
-## Current prototype
+See [`agent.md`](./agent.md) for project goals and development rules.
 
-- Next.js 14 + React 18 + TypeScript + Tailwind
-- React Three Fiber 3D floating arena
-- 6 sample agents: Claude, Codex, Gemini, GPT, Qwen, DeepSeek
-- one-shot `AgentController` API
-- attack / heavy attack / dodge / edge recovery
-- Smash-style damage + knockback
-- 3-stock respawn rule
-- body collisions between fighters
-- chaos events: ice, wind, low-gravity, arena shrink
-- weapon pickups: hammer, shield, push gun, bomb
-- model-controlled pickup/use decisions
-- hit flash, impact ring, camera shake and dynamic camera
-- live intent, combat feed and per-agent stats
-- post-match summary schema + review prompt builder
+## Core loop
+
+```text
+same task + same API
+        ↓
+Claude / Codex / Gemini / ...
+        ↓
+one generated controller each
+        ↓
+LOCK CODE
+        ↓
+Headless Arena Engine
+        ↓
+combat + weapons + collisions + seeded random events
+        ↓
+WorldState + events + stats + replay
+        ↓
+2D / 3D / replay renderer
+```
+
+## Architecture
+
+```text
+agents/
+  sample/generated controllers
+
+features/engine/
+  authoritative headless simulation
+  observations + actions
+  deterministic RNG
+  combat / weapons / stocks / chaos
+  tournament + behavior metrics
+
+features/controllers/
+  canonical generation prompt
+  strategy/submission schema
+  source/controller identity
+
+features/sandbox/
+  ControllerRuntime abstraction
+  trusted in-process adapter
+  runtime wrapping + action recording
+
+features/replay/
+  replay schema
+  deterministic match recorder
+  recorded headless match runner
+
+features/renderers/
+  passive renderer contracts
+
+features/arena/
+  current 3D presentation prototype
+```
+
+The renderer is intentionally not authoritative. 2D Canvas, Pixi, Three.js or another presentation layer can replace the current 3D prototype without changing controller strategy or match rules.
+
+## Important simulation rules
+
+- every agent sees the same pre-action world snapshot for a tick
+- all actions are collected before authoritative resolution
+- controller outputs are sanitized
+- engine randomness comes from a seeded RNG
+- generated controller code should eventually run behind an isolated `ControllerRuntime`
+- one controller failure must not crash the match
+
+## Controller contract
+
+```ts
+interface AgentController {
+  act(observation: Readonly<Observation>): Action
+}
+```
+
+Controllers may keep private memory in their closure but cannot call an LLM again during the match.
+
+A model submission contains both a strategy manifest and source code. The source receives a stable identity/hash so a replay can say exactly which controller participated.
+
+## Replay
+
+A `MatchRecord` can contain:
+
+- engine version
+- seed + match config
+- controller ids / source hashes
+- initial world state
+- sanitized actions per tick
+- authoritative state snapshots
+- public events
+- final summary
+
+This is simulation data rather than a video, so any renderer can replay or inspect it.
+
+## Current game rules
+
+Initial mode is a Smash/Fall-Guys-like physics brawl:
+
+- 4–8 agents
+- stock-based survival
+- movement, dodge, normal attack, heavy attack
+- hammer, shield, push gun, bomb
+- ice, wind, low gravity, shrinking arena
+- body interaction and knockback
+
+The strategy space should intentionally contain trade-offs: attack, retreat, loot, hold center, chase weak opponents, avoid hazards, or exploit an edge opportunity.
 
 ## Run
 
@@ -27,8 +118,6 @@ The goal is not a serious benchmark. The goal is to make model-generated behavio
 pnpm install
 pnpm dev
 ```
-
-Then open `http://localhost:3000`.
 
 ## Build
 
@@ -38,40 +127,13 @@ pnpm build
 pnpm start
 ```
 
-The app follows the same Next/pnpm deployment direction as `AgentVisual` and is suitable for Vercel/Next deployment.
+## Development priority
 
-## Architecture
-
-```text
-agents/
-  default-agents.ts        # sample one-shot generated controllers
-
-features/arena/
-  types.ts                 # Observation / Action / weapons / events / stats
-  ArenaExperience.tsx      # world simulation + 3D presentation + HUD
-  match-summary.ts         # post-match archive + model review prompt
-
-app/
-  page.tsx
-  layout.tsx
-  globals.css
-```
-
-The intended model-generated artifact is an implementation of:
-
-```ts
-interface AgentController {
-  act(observation: Observation): Action
-}
-```
-
-A controller can keep internal memory, but it cannot call the model again during the match. The same controller sees a new observation every simulation step and reacts to fighters, weapons, arena state and recent events.
-
-## Next milestones
-
-1. Replace lightweight collision/knockback integration with Rapier rigid bodies.
-2. Add authored melee animation states: wind-up, hit, recoil, dodge and KO.
-3. Add projectile/bomb entities instead of instant weapon resolution.
-4. Add deterministic match seeds and replay export.
-5. Save each model controller + match archive under `matches/` for GitHub reproducibility.
-6. Add real Claude/Codex/Gemini controller generation adapters.
+1. Headless authoritative engine
+2. Controller strategy/API
+3. Controller sandbox boundary
+4. deterministic replay / match records
+5. tournament + behavior fingerprint
+6. real model-generated controller workflow
+7. renderer integration
+8. final visual polish
