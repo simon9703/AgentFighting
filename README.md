@@ -88,8 +88,10 @@ Controllers may keep private memory in their closure but cannot call an LLM agai
 A model submission contains both a strategy manifest and source code. The source receives a stable identity/hash so a replay can say exactly which controller participated.
 
 `evaluateControllerSubmissions()` is the local end-to-end entry point: it validates
-locked submissions, runs the same group over many seeds, produces a behavior
-fingerprint, and writes one replayable `MatchRecord` per seed. The current source
+submissions, creates an immutable `ControllerLock`, runs the same group over many
+seeds, produces a behavior fingerprint, and writes one replayable `MatchRecord`
+per seed. The lock holds the controller id, model, strategy label, and source hash
+for the exact set that entered the tournament. The current source
 compiler is for trusted local development only; untrusted source still requires an
 isolated Worker/process runtime.
 

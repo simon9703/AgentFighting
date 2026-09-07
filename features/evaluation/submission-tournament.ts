@@ -6,6 +6,7 @@ import {
 } from '@/features/controllers';
 import { runTournament, type ArenaConfig, type TournamentResult } from '@/features/engine';
 import { runRecordedMatch, type MatchRecord } from '@/features/replay';
+import { createControllerLock, type ControllerLock } from './controller-lock';
 
 const PALETTE = ['#9b8cff', '#52d273', '#52b8ff', '#65e0c3', '#ffd267', '#ff7db4', '#ff9d63', '#8fe2f2'];
 
@@ -19,6 +20,7 @@ export interface EvaluateSubmissionsInput {
 
 export interface SubmissionTournamentResult {
   agents: SubmittedAgent[];
+  lock: ControllerLock;
   tournament: TournamentResult;
   records: MatchRecord[];
 }
@@ -46,20 +48,15 @@ function buildAgents(
 export function evaluateControllerSubmissions(input: EvaluateSubmissionsInput): SubmissionTournamentResult {
   if (input.seeds.length === 0) throw new Error('Evaluation needs at least one seed.');
   const submissions = input.submissions.map(parseControllerSubmission);
+  const lock = createControllerLock(submissions, input.engineVersion);
   const agents = buildAgents(submissions, input.presentation);
   const tournament = runTournament(agents, input.seeds, input.config);
-  const controllers = agents.map((agent) => ({
-    agentId: agent.id,
-    model: agent.model,
-    controllerId: agent.controllerId,
-    sourceHash: agent.sourceHash,
-    strategyLabel: agent.strategyLabel,
-  }));
+  const controllers = lock.controllers;
   const records = input.seeds.map((seed) => runRecordedMatch({
     agents,
     config: { ...input.config, seed },
     controllers,
     engineVersion: input.engineVersion,
   }));
-  return { agents, tournament, records };
+  return { agents, lock, tournament, records };
 }

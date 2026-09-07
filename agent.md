@@ -113,6 +113,7 @@ features/replay/
 
 features/evaluation/
   validates locked ControllerSubmissions
+  creates a portable ControllerLock before any match runs
   compiles them at the execution boundary
   runs many seeded matches
   returns fingerprints plus replayable records
