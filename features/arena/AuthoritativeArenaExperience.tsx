@@ -8,9 +8,7 @@ import styles from './AuthoritativeArenaExperience.module.css';
 
 const TICK_MS = 1000 / 30;
 const MAX_EVENTS = 7;
-
-const initialView = (): ArenaViewModel =>
-  createArenaViewModel(createMatchSession(headlessDefaultAgents).getState());
+const MATCH_SECONDS = 90;
 
 function formatEvent(event: ArenaViewModel['events'][number]) {
   const actor = event.actor ?? 'arena';
@@ -23,7 +21,6 @@ export default function AuthoritativeArenaExperience() {
   const [view, setView] = useState<ArenaViewModel>(() => createArenaViewModel(session.getState()));
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
-  const [generation, setGeneration] = useState(0);
   const accumulator = useRef(0);
   const lastFrame = useRef<number | null>(null);
 
@@ -49,12 +46,9 @@ export default function AuthoritativeArenaExperience() {
     };
   }, [playing, session, speed, view.winnerId]);
 
-  const restart = () => {
-    window.location.reload();
-  };
-
+  const restart = () => window.location.reload();
   const radius = Math.max(1, view.radius);
-  const progress = Math.max(0, Math.min(1, 1 - view.timeLeft / 90));
+  const progress = Math.max(0, Math.min(1, 1 - view.timeLeft / MATCH_SECONDS));
   const leader = [...view.fighters].sort((a, b) => b.stocks - a.stocks || a.damage - b.damage)[0];
 
   return (
@@ -71,7 +65,7 @@ export default function AuthoritativeArenaExperience() {
           {[1, 2, 4].map((value) => (
             <button key={value} className={speed === value ? styles.active : ''} onClick={() => setSpeed(value)}>{value}×</button>
           ))}
-          <button onClick={restart}>New seed</button>
+          <button onClick={restart}>Restart</button>
         </div>
       </header>
 
