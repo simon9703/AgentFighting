@@ -3,6 +3,15 @@ export type FighterId = 'claude' | 'codex' | 'gemini' | 'gpt' | 'qwen' | 'deepse
 export type Vec2 = { x: number; z: number };
 
 export type ChaosType = 'none' | 'ice' | 'wind' | 'low-gravity' | 'shrink';
+export type WeaponType = 'hammer' | 'shield' | 'push-gun' | 'bomb';
+
+export interface WeaponSnapshot {
+  id: string;
+  type: WeaponType;
+  position: Vec2;
+  distance: number;
+  available: boolean;
+}
 
 export interface FighterSnapshot {
   id: FighterId;
@@ -14,12 +23,14 @@ export interface FighterSnapshot {
   distanceToEdge: number;
   stunned: boolean;
   intent: string;
+  weapon?: WeaponType;
 }
 
 export interface Observation {
   time: number;
   self: FighterSnapshot;
   enemies: FighterSnapshot[];
+  weapons: WeaponSnapshot[];
   arena: {
     radius: number;
     chaos: ChaosType;
@@ -34,6 +45,9 @@ export interface Action {
   attack: boolean;
   heavyAttack: boolean;
   dodge: boolean;
+  pickup: boolean;
+  useWeapon: boolean;
+  aim?: Vec2;
   intent: string;
 }
 
@@ -43,6 +57,7 @@ export interface AgentStrategy {
   riskTolerance: number;
   retreatDamage: number;
   edgeAvoidance: number;
+  weaponBias: number;
   targetPolicy: 'nearest' | 'weakest' | 'strongest' | 'last-attacker';
 }
 
@@ -60,7 +75,7 @@ export interface AgentDefinition {
 
 export type MatchEvent = {
   time: number;
-  type: 'hit' | 'stock-lost' | 'eliminated' | 'respawn' | 'chaos' | 'win';
+  type: 'hit' | 'stock-lost' | 'eliminated' | 'respawn' | 'chaos' | 'win' | 'weapon-pickup' | 'weapon-use';
   actor?: FighterId;
   target?: FighterId;
   detail: string;
@@ -75,4 +90,6 @@ export interface FighterStats {
   damageTaken: number;
   kos: number;
   stocksLost: number;
+  weaponsPicked: number;
+  weaponsUsed: number;
 }
