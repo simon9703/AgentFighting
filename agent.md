@@ -1,257 +1,305 @@
 # AgentFighting — Agent Development Guide
 
-## Goal
+## Mission
 
-AgentFighting is an AI behavior arena, not a serious model benchmark and not primarily a fighting-game UI project.
+AgentFighting is an AI behavior arena first and a fighting-game presentation second.
 
-The core product loop is:
+Its defining loop is:
 
 ```text
 same task + same API
         ↓
 multiple models generate one controller each
         ↓
-controllers are locked before the match
+submission manifest + source are validated
         ↓
-all controllers act inside the same dynamic world
+controller/source identities are locked
         ↓
-physics / combat / weapons / random events / other agents interact
+fixed controllers act in the same dynamic world
         ↓
-match result + behavior data + replay
+all actions are collected from the same tick snapshot
+        ↓
+authoritative simulation resolves the world
+        ↓
+replay + behavior data + tournament artifact
 ```
 
-The interesting output is the process: emergent strategies, mistakes, rivalries, risk-taking, recovery, weapon choices, and chaotic interaction. Winning is useful, but entertainment and behavioral diversity are more important than ranking models.
+The project is not a serious model benchmark. The interesting output is behavioral diversity: emergent strategies, mistakes, rivalries, risk-taking, recovery, weapon choices and adaptation to shared chaos.
 
-## Product principles
+## Non-negotiable invariants
 
-1. **One-shot code generation**
-   - A model generates its controller once before the match.
-   - No LLM calls are required during the match.
-   - The same controller may keep internal state across ticks.
+### 1. One-shot controller generation
 
-2. **Realtime behavior from fixed code**
-   - Controller code is fixed, but its behavior is not.
-   - Every tick receives a fresh observation of the current world.
-   - The world changes because of combat, collisions, weapons, random events, and other agents.
+- A model generates controller code before evaluation.
+- No LLM calls are required during the match.
+- The controller may keep private state in its closure.
+- The controller source is immutable once included in a `ControllerLock`.
 
-3. **No hidden strategy in the engine**
-   - Observation should expose facts, not conclusions.
-   - Do not expose fields such as `bestTarget`, `dangerScore`, `optimalPath`, or `recommendedAction`.
-   - Controllers should decide who is dangerous, whether to attack, retreat, loot, camp, or take risks.
+### 2. Authoritative engine only
 
-4. **Same-tick fairness**
-   - Every active controller observes the same authoritative world snapshot for tick N.
-   - All actions are collected first.
-   - Actions are then resolved together into world state N+1.
-   - Never step physics after agent A before asking agent B for its action.
+There must be exactly one source of match truth: `features/engine/`.
 
-5. **Deterministic simulation where practical**
-   - Randomness must come from a seeded RNG owned by the engine.
-   - A match should be reproducible from controller versions + engine version + config + seed.
-   - `Math.random()` must not be used inside authoritative engine logic.
+Do not implement damage, collision outcomes, stocks, respawn, chaos, winner selection or weapon rules inside React components, renderers, replay UI or controller adapters.
 
-6. **Renderer is replaceable**
-   - 2D Canvas, Pixi, Three.js, React Three Fiber, or another renderer are presentation choices.
-   - Renderers subscribe to world snapshots/events.
-   - Renderers must not decide damage, collision results, random events, stocks, respawn, or winners.
+### 3. Same-tick fairness
 
-7. **Headless first**
-   - The engine must be able to run without DOM, WebGL, React, or Three.js.
-   - We should be able to run 1, 10, or 1000 seeded matches in batch for strategy analysis.
-
-## Current game design
-
-Initial mode: physics brawl / chaos arena.
-
-- 4–8 agents in one arena
-- stock-based survival rather than instant permanent death
-- movement, dodge, normal attack, heavy attack
-- weapons such as hammer, shield, push gun, bomb
-- random global events such as ice, wind, low gravity, shrinking arena
-- agents can collide and indirectly change each other's future observations
-
-The game should favor trade-offs rather than one dominant rule. For example:
+For tick N:
 
 ```text
-attack weak enemy
-vs
-pick up weapon
-vs
-move toward center
-vs
-escape edge
-vs
-avoid current hazard
+freeze/read authoritative state N
+        ↓
+build observations for every active controller
+        ↓
+collect every action
+        ↓
+sanitize actions
+        ↓
+resolve all actions into state N+1
 ```
 
-If one simple policy dominates every state, controller diversity will collapse.
+Never let controller B observe controller A's already-applied action from the same tick.
 
-## Architecture
+### 4. Determinism where practical
+
+- Authoritative randomness comes only from the seeded engine RNG.
+- Do not use `Math.random()` inside engine rules.
+- A match identity is derived from controller identities + engine version + config + seed.
+- Presentation-only animation randomness is allowed if it cannot affect simulation state.
+
+### 5. Facts, not strategy hints
+
+`Observation` should expose world facts, not conclusions.
+
+Good:
+
+- positions / velocities
+- damage / stocks
+- distance to edge
+- weapons and availability
+- arena state / chaos
+- recent public events
+
+Bad:
+
+- `bestTarget`
+- `dangerScore`
+- `safeDirection`
+- `recommendedAction`
+
+Those decisions belong to the controller.
+
+### 6. Renderer is passive and replaceable
+
+Current product rendering is 2D/2.5D, but the engine must remain usable by Canvas, Pixi, Three.js, native or replay-only renderers.
+
+Renderer code may interpolate or animate snapshots. It may not mutate match truth.
+
+### 7. Headless execution remains first-class
+
+The engine and evaluation pipeline must run without React, DOM, Canvas or WebGL. Batch evaluation over many seeds must not depend on the visual app.
+
+## Current architecture
 
 ```text
 agents/
-  generated or sample controllers
+  reference AgentDefinitions
+  sample ControllerSubmissions
 
-features/engine/
-  authoritative world state
-  observation creation
-  action sanitization
-  tick scheduling
-  movement/combat/weapons/events
-  deterministic RNG
-  tournament analysis
+features/controllers/
+  canonical generation prompt
+  submission/strategy schema
+  source policy
+  source/controller identity
+  trusted local compiler
 
 features/sandbox/
-  controller execution boundary
-  trusted in-process runtime for development
-  isolated runtime adapter for generated code later
+  runtime boundary
+  trusted in-process adapter
+  async same-tick action collection
+  browser Worker runtime
+
+features/engine/
+  authoritative state and rules
+  observation creation
+  action sanitization
+  deterministic RNG
+  match/tournament statistics
 
 features/replay/
-  match record format
-  tick/action/event/snapshot recording
-  replay/export helpers
+  MatchRecord
+  per-tick actions/snapshots/events
+  deterministic verification
+  highlight timeline
 
 features/evaluation/
-  validates locked ControllerSubmissions
-  creates a portable ControllerLock before any match runs
-  compiles them at the execution boundary
-  runs many seeded matches
-  returns fingerprints plus replayable records
+  ControllerLock
+  submission evaluation pipeline
+  TournamentArtifact
+  human-readable report generation
 
 features/renderers/
-  passive renderer contracts
+  passive MatchSession and ArenaViewModel adapters
 
 features/arena/
-  current visual prototype only; should consume engine state rather than own rules
+  live arena UI only
+
+features/tournament/
+  Tournament Lab UI only
+```
+
+Dependency direction should remain:
+
+```text
+controllers → engine contracts
+sandbox → controller/engine contracts
+engine → no UI dependency
+replay/evaluation → engine data
+renderers → engine data
+UI → renderers/evaluation/replay
 ```
 
 ## Controller contract
 
-Controllers depend only on engine types.
-
 ```ts
 interface AgentController {
-  act(observation: Observation): Action
+  act(observation: Readonly<Observation>): Action
 }
 ```
 
-Controllers may keep private state:
+The action surface should remain compact and expressive:
 
-```ts
-function createController(): AgentController {
-  let targetId: string | null = null
-  let mode = 'neutral'
+- `moveX` / `moveZ`
+- `attack`
+- `heavyAttack`
+- `dodge`
+- `pickup`
+- `useWeapon`
+- `aimX` / `aimZ`
+- optional short `intent`
 
-  return {
-    act(obs) {
-      // update memory and choose an action
-    }
-  }
-}
-```
-
-A controller must not:
-
-- import React/Three/Rapier
-- mutate world state directly
-- access another controller's internal state
-- call engine internals
-- use network/filesystem APIs during a match
-- depend on wall-clock time
-
-## Observation design
-
-Prefer raw facts:
-
-- self position / velocity / damage / stocks / cooldowns
-- nearby or visible enemy state
-- current weapon
-- available weapon positions/types
-- arena bounds / safe area / current chaos event
-- recent public combat events
-
-Avoid precomputed strategic labels.
-
-## Action design
-
-Keep the action surface small and expressive. Initial actions:
-
-- moveX / moveZ
-- attack
-- heavyAttack
-- dodge
-- pickup
-- useWeapon
-- aim
-- optional short `intent` string for UI/debugging
-
-`intent` is a declared action label, not chain-of-thought.
+`intent` is a debug/UI label, never chain-of-thought.
 
 ## Controller safety
 
-All controller outputs must be sanitized before resolution.
+Every controller output must be sanitized before resolution.
+
+Required safeguards:
 
 - clamp numeric ranges
+- reject NaN/Infinity
 - default missing fields
-- reject NaN / Infinity
 - catch controller exceptions
-- apply per-tick execution limits in isolated runtimes
-- never let one controller crash the whole match
+- neutral fallback action on failure
+- startup/per-tick timeout in isolated runtimes
+- terminate timed-out workers
+- one bad controller must not crash a match
 
-The engine must depend on a `ControllerRuntime` abstraction rather than a specific JavaScript sandbox implementation.
+### Trusted versus external source
 
-The first local source compiler is deliberately named `compileTrustedControllerSource`.
-It performs policy validation and freezes observations, but `new Function` is **not**
-a security boundary. Never describe it as a safe sandbox. Any externally submitted
-controller must move to a Worker/process runtime with resource limits before it is
-accepted from users.
+`compileTrustedControllerSource()` is only for trusted local/sample code. It uses `new Function` and is not a security boundary.
 
-## Match records and replay
+External source should use the Worker runtime in browser contexts. A future public multi-tenant service must use stronger server-side process/container isolation with CPU, memory, filesystem and network restrictions.
 
-A replayable match should contain at least:
+Do not silently route untrusted source through the trusted compiler.
+
+## Replay and tournament records
+
+A replayable `MatchRecord` should remain sufficient to inspect the complete authoritative match:
 
 - schema version
 - engine version
-- seed
-- match config
-- controller identifiers / source hashes
-- initial world state
-- per-tick sanitized actions
-- authoritative events
-- periodic or per-tick snapshots
-- final result and statistics
+- seed/config
+- controller descriptors/hashes
+- initial state
+- sanitized per-tick actions
+- authoritative per-tick state
+- public events
+- final summary
 
-Replay is not a video. It is deterministic simulation data that any renderer can consume.
+A `TournamentArtifact` should bundle the evaluation evidence needed to reproduce or audit a run:
 
-## Strategy evaluation
+- `ControllerLock`
+- original submissions/manifests
+- seeds/config
+- tournament aggregates
+- behavior fingerprints
+- replay records
 
-Do not infer a model's style from one match only.
+Artifact schemas should be versioned. Do not make renderer-specific data authoritative.
 
-Run the same controller over many seeds and aggregate:
+## Behavior evaluation
 
-- win rate
-- average rank
-- attacks / hits / accuracy
-- damage dealt / taken
-- weapon pickups / uses
-- edge exposure
-- movement / survival behavior
-- target concentration
-- chaos-event survival
+Do not infer a controller's style from a single match.
 
-Expose this as a Behavior Fingerprint rather than a single benchmark score.
+Aggregate many seeds and prefer multidimensional fingerprints over one score. Existing dimensions include:
 
-## Development priority
+- aggression
+- accuracy
+- weapon usage
+- edge risk
+- mobility
+- survival
 
-Current order of work:
+Future metrics are welcome when they describe observable behavior rather than encode an optimal strategy.
 
-1. Headless authoritative engine
-2. Controller API and execution boundary
-3. deterministic seed/replay/match record
-4. strategy/tournament metrics
-5. generated-controller workflow and reproducible batch evaluation
-6. isolated Worker/process runtime for external controller source
-7. renderer integration
-8. final visual polish / 2D vs 3D choice
+## Game design rules
 
-Do not spend significant time polishing rendering if the headless architecture or controller strategy space is still unstable.
+The arena should create recurring trade-offs:
+
+```text
+finish damaged opponent
+vs
+recover from edge
+vs
+pick up weapon
+vs
+hold center
+vs
+avoid chaos
+vs
+escape a crowded fight
+```
+
+Avoid adding mechanics when one simple policy obviously dominates them. New mechanics should increase behavioral differentiation or spectating value.
+
+## v1 status
+
+The following are considered established and should not be reimplemented in parallel:
+
+- authoritative headless engine
+- deterministic seeded matches
+- same-tick action collection semantics
+- controller submission schema and identities
+- trusted local evaluation pipeline
+- controller locking
+- tournament aggregation and behavior fingerprints
+- replay records and deterministic verification
+- highlight extraction
+- portable tournament artifacts and reports
+- live authoritative arena UI
+- tournament/replay UI
+- browser Worker runtime primitives
+
+## Next-phase development order
+
+See `docs/PLAN.md` for detailed milestones. The high-level priority is:
+
+1. real Controller Submission UI and validation experience
+2. route external submissions through Worker-backed execution
+3. move long tournaments off the main UI thread with progress streaming
+4. strengthen persistence/import/export and replay ergonomics
+5. improve combat readability and visual effects without moving rules into presentation
+6. only after those are stable, consider new arenas, game modes or a richer 3D renderer
+
+## Definition of done for changes
+
+Before merging a meaningful change:
+
+- `pnpm typecheck` passes
+- `pnpm build` passes
+- no renderer-owned game rules are introduced
+- no duplicate controller/evaluation pipeline is introduced
+- docs are updated when architecture/contracts change
+- exported schemas are versioned when compatibility changes
+
+When choosing between a flashy feature and preserving the dependency boundary, preserve the boundary.
