@@ -21,7 +21,13 @@ body {
 }
 
 body {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 button,
@@ -29,4 +35,43 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+.product-nav {
+  position: fixed;
+  z-index: 100;
+  top: 14px;
+  right: 16px;
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid rgba(118, 135, 177, 0.2);
+  border-radius: 12px;
+  background: rgba(7, 10, 18, 0.78);
+  box-shadow: 0 14px 45px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.product-nav a {
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: #8d99b5;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: 150ms ease;
+}
+
+.product-nav a:hover {
+  background: #18213a;
+  color: #f6f8ff;
+}
+
+@media (max-width: 720px) {
+  .product-nav {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+  }
 }
