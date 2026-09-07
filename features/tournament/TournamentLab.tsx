@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { sampleControllerSubmissions } from '@/agents/sample-submissions';
 import { evaluateControllerSubmissions, serializeTournamentArtifact, createTournamentReport, type SubmissionTournamentResult } from '@/features/evaluation';
 import { createHighlightTimeline } from '@/features/replay';
+import { createArenaViewModel } from '@/features/renderers/types';
+import ThreeArenaViewport from '@/features/arena/ThreeArenaViewport';
 import styles from './TournamentLab.module.css';
 
 const FINGERPRINT_KEYS = ['aggression', 'accuracy', 'weaponUsage', 'edgeRisk', 'mobility', 'survival'] as const;
@@ -24,6 +26,9 @@ export default function TournamentLab() {
   const [running, setRunning] = useState(false);
   const [recordIndex, setRecordIndex] = useState(0);
   const [tickIndex, setTickIndex] = useState(0);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(1);
+  const [selectedFighterId, setSelectedFighterId] = useState<string>();
   const [error, setError] = useState<string | null>(null);
 
   const run = () => {
@@ -38,6 +43,8 @@ export default function TournamentLab() {
       setResult(next);
       setRecordIndex(0);
       setTickIndex(0);
+      setReplayPlaying(false);
+      setSelectedFighterId(undefined);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -46,8 +53,25 @@ export default function TournamentLab() {
   };
 
   const record = result?.records[recordIndex];
-  const tick = record?.ticks[Math.min(tickIndex, Math.max(0, (record?.ticks.length ?? 1) - 1))];
+  const safeTickIndex = Math.min(tickIndex, Math.max(0, (record?.ticks.length ?? 1) - 1));
+  const tick = record?.ticks[safeTickIndex];
   const highlights = useMemo(() => record ? createHighlightTimeline(record, 18) : [], [record]);
+  const replayView = useMemo(() => tick ? createArenaViewModel(tick.state) : null, [tick]);
+
+  useEffect(() => {
+    if (!replayPlaying || !record) return;
+    const interval = window.setInterval(() => {
+      setTickIndex((current) => {
+        const next = current + Math.max(1, Math.round(replaySpeed * 2));
+        if (next >= record.ticks.length - 1) {
+          setReplayPlaying(false);
+          return Math.max(0, record.ticks.length - 1);
+        }
+        return next;
+      });
+    }, 1000 / 30);
+    return () => window.clearInterval(interval);
+  }, [record, replayPlaying, replaySpeed]);
 
   return (
     <main className={styles.shell}>
@@ -61,7 +85,7 @@ export default function TournamentLab() {
       </header>
 
       <section className={styles.pipeline}>
-        {['SUBMISSIONS', 'LOCK', '5 SEEDED MATCHES', 'FINGERPRINT', 'REPLAY', 'EXPORT'].map((item, index) => (
+        {['SUBMISSIONS', 'LOCK', '5 SEEDED MATCHES', 'FINGERPRINT', '3D REPLAY', 'EXPORT'].map((item, index) => (
           <div key={item} className={styles.pipelineStep}><b>{String(index + 1).padStart(2, '0')}</b><span>{item}</span></div>
         ))}
       </section>
@@ -115,27 +139,34 @@ export default function TournamentLab() {
 
           <section className={styles.replaySection}>
             <div className={styles.replayHeader}>
-              <div><div className={styles.panelTitle}>AUTHORITATIVE REPLAY INSPECTOR</div><h2>Seed {record?.seed}</h2></div>
-              <div className={styles.seedTabs}>{result.records.map((item, index) => <button key={item.seed} className={recordIndex === index ? styles.active : ''} onClick={() => { setRecordIndex(index); setTickIndex(0); }}>{item.seed}</button>)}</div>
+              <div><div className={styles.panelTitle}>AUTHORITATIVE THREE.JS REPLAY</div><h2>Seed {record?.seed}</h2></div>
+              <div className={styles.seedTabs}>{result.records.map((item, index) => <button key={item.seed} className={recordIndex === index ? styles.active : ''} onClick={() => { setRecordIndex(index); setTickIndex(0); setReplayPlaying(false); }}>{item.seed}</button>)}</div>
             </div>
 
-            {record && tick && (
+            {record && tick && replayView && (
               <div className={styles.replayGrid}>
                 <div className={styles.replayArena}>
-                  <div className={styles.arenaCircle}>
-                    {tick.state.fighters.map((fighter) => {
-                      const radius = Math.max(1, tick.state.arenaRadius);
-                      return <div key={fighter.id} className={styles.dot} style={{ left: `${50 + fighter.position.x / radius * 43}%`, top: `${50 + fighter.position.z / radius * 43}%`, background: fighter.color, opacity: fighter.eliminated ? .15 : 1 }}><span>{fighter.name}</span></div>;
-                    })}
-                    <div className={styles.center}>AF</div>
+                  <div className={styles.replayViewport}>
+                    <ThreeArenaViewport view={replayView} selectedFighterId={selectedFighterId} quality="high" />
+                    <div className={styles.replayHud}>REPLAY · TICK {tick.tick} · {tick.state.chaos.type.toUpperCase()}</div>
                   </div>
-                  <input type="range" min={0} max={Math.max(0, record.ticks.length - 1)} value={Math.min(tickIndex, record.ticks.length - 1)} onChange={(event) => setTickIndex(Number(event.target.value))} />
+
+                  <div className={styles.replayControls}>
+                    <button onClick={() => setReplayPlaying((value) => !value)}>{replayPlaying ? 'Ⅱ Pause' : '▶ Play'}</button>
+                    {[0.5, 1, 2, 4].map((speed) => <button key={speed} className={replaySpeed === speed ? styles.active : ''} onClick={() => setReplaySpeed(speed)}>{speed}×</button>)}
+                    <div className={styles.fighterFocus}>
+                      <button className={!selectedFighterId ? styles.active : ''} onClick={() => setSelectedFighterId(undefined)}>Overview</button>
+                      {tick.state.fighters.map((fighter) => <button key={fighter.id} className={selectedFighterId === fighter.id ? styles.active : ''} onClick={() => setSelectedFighterId(fighter.id)}>{fighter.name}</button>)}
+                    </div>
+                  </div>
+
+                  <input type="range" min={0} max={Math.max(0, record.ticks.length - 1)} value={safeTickIndex} onChange={(event) => { setTickIndex(Number(event.target.value)); setReplayPlaying(false); }} />
                   <div className={styles.tickMeta}><span>tick {tick.tick}</span><span>{tick.time.toFixed(2)}s</span><span>{tick.state.chaos.type}</span></div>
                 </div>
 
                 <aside className={styles.highlights}>
                   <div className={styles.panelTitle}>HIGHLIGHTS</div>
-                  {highlights.map((highlight) => <button key={highlight.id} onClick={() => { const index = record.ticks.findIndex((entry) => entry.tick >= highlight.tick); setTickIndex(Math.max(0, index)); }}><time>{highlight.time.toFixed(1)}s</time><span>{highlight.label}</span><b>{highlight.priority}</b></button>)}
+                  {highlights.map((highlight) => <button key={highlight.id} onClick={() => { const index = record.ticks.findIndex((entry) => entry.tick >= highlight.tick); setTickIndex(Math.max(0, index)); setReplayPlaying(false); }}><time>{highlight.time.toFixed(1)}s</time><span>{highlight.label}</span><b>{highlight.priority}</b></button>)}
                 </aside>
               </div>
             )}
