@@ -9,3 +9,5 @@ export interface ArenaRenderer {
 
 // Renderers are deliberately passive. They may animate/interpolate state,
 // but must never mutate combat rules, damage, stocks, chaos, or winner state.
+export { createMatchSession } from './match-session';
+export type { MatchSession } from './match-session';

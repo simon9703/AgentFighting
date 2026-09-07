@@ -42,6 +42,7 @@
 
 ## Presentation
 
+- ☑️ Add a renderer-facing MatchSession that exposes only headless state
 - ☐ Bind the existing prototype renderer to authoritative replay state only
 - ☐ Add a minimal 2D replay inspector for debugging and strategy analysis
 - ☐ Choose the final 2D / 2.5D / 3D viewing experience after engine validation
