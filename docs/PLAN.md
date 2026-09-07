@@ -2,265 +2,228 @@
 
 ## Theme
 
-**Submission Platform + Scalable Evaluation + Spectator-Grade Three.js Presentation**
+**Controller Experimentation Platform + Scalable Evaluation + Spectator-Grade Three.js Presentation**
 
-v1 proved the authoritative architecture and local tournament loop. v2 turns that loop into a usable controller experimentation platform while making behavior visibly understandable and entertaining to watch.
-
-Three.js is now the default product presentation, while the engine, tournament pipeline and replay format remain renderer-agnostic.
-
-## Presentation Phase 2 — Completed
-
-The current visual upgrade is considered complete enough to move the primary focus back to the platform path.
-
-### Delivered
-
-- Three.js live arena replaces the old DOM/CSS pseudo-arena.
-- Low-poly fighters, weapons, arena geometry, lighting, shadows and fog.
-- Dedicated presentation-only `ArenaFx` system.
-- Fast movement trails and combat bursts.
-- Attack arcs from observable intent changes.
-- Heavy attack visual emphasis.
-- Dodge burst/trail.
-- Shield field effect.
-- Weapon-use beam/tracer and target link.
-- Bomb-specific visual emphasis from public weapon-use detail.
-- Hit / stock loss / elimination escalation.
-- `CameraDirector` with overview, combat, KO and selected-fighter focus modes.
-- Auto framing based on active fighter spread.
-- Live fighter follow mode from the contender cards.
-- `ArenaPostFX` with subtle bloom, vignette, hit flash and restrained energy/chromatic distortion.
-- Chaos-reactive arena color, light, exposure and post FX.
-- High/low quality renderer hooks.
-- Tactical direction line based on observable movement/facing data.
-- Controller short `intent` visualization without exposing chain-of-thought.
-- Tournament replay now reuses the same `ThreeArenaViewport` as live matches.
-- Replay play/pause, speed controls, scrubber, highlights and per-fighter camera focus.
-
-### Presentation architecture
+The project now has one authoritative engine and two execution/presentation paths built around the same contracts:
 
 ```text
-authoritative WorldState / replay snapshot
-        ↓
-createArenaViewModel()
-        ↓
-ThreeArenaViewport
-   ├─ scene / fighters / weapons
-   ├─ ArenaFx
-   ├─ CameraDirector
-   └─ ArenaPostFX
-        ↓
-WebGL
-
-React HUD / replay controls consume the same renderer-neutral data in parallel.
+trusted reference controllers ─┐
+                              ├─ authoritative engine ─ replay/artifact ─ Three.js
+external controller Workers ──┘
 ```
 
-### Invariants
+Three.js is the default product presentation, not an engine dependency.
 
-- particles, camera, interpolation and post FX are presentation only
-- no Three.js code decides damage, collision, stocks, weapon outcomes, chaos or winner state
-- replay and live presentation consume authoritative snapshots rather than separate game logic
-- controller `intent` is a short public/debug label, never hidden reasoning
+## Completed — Presentation Phase 2
 
-## Current focus — Milestone 1: Controller Submission Workspace
+- Three.js live arena replacing the previous DOM/CSS pseudo-arena.
+- Low-poly fighters, weapons, arena geometry, lighting, fog and shadows.
+- `ArenaFx` for trails, bursts, rings, attack arcs, heavy attacks, dodge, shield and weapon tracers.
+- `CameraDirector` with overview, combat, KO and selected-fighter modes.
+- `ArenaPostFX` with bloom, vignette, hit flash and restrained energy/chromatic treatment.
+- Chaos-reactive arena/post-processing presentation.
+- Observable intent/direction visualization without hidden reasoning.
+- Shared `ThreeArenaViewport` for live and replay.
+- Replay play/pause, 0.5×–4× speed, seed switching, scrubber, highlights and fighter focus.
+- Responsive game-style HUD.
 
-### Goal
+## Completed — Milestone 1: Controller Submission Workspace
 
-Let a user create or paste complete `ControllerSubmission`s, validate them before execution, and understand exactly what will be locked.
+`/submit` now provides:
 
-### Work
+- multiple editable participants
+- agent/model fields
+- strategy-manifest JSON editing
+- controller JavaScript editing
+- canonical Zod validation
+- source-policy validation
+- visible validation errors
+- source hash and controller identity preview
+- add/remove participants
+- exact-submission UI lock
+- portable submission export
+- direct isolated tournament launch after locking
 
-- Add `/submit` or a submission workspace inside Tournament Lab.
-- Editable fields: agent id, model label, strategy manifest and JavaScript source.
-- Parse through the canonical Zod schema.
-- Run source policy validation before execution.
-- Show violations with rule/message and source context where practical.
-- Preview `sourceHash`, `controllerId` and strategy metadata.
-- Support adding/removing multiple participant submissions.
-- Provide sample templates as starting points.
-- Do not auto-edit source after the user chooses to lock it.
+The UI lock is not authoritative. Evaluation independently creates the canonical `ControllerLock` from the validated bytes.
 
-### Acceptance criteria
+## Completed — Milestone 2: Worker-backed External Execution Foundation
 
-- invalid submissions cannot enter a tournament
-- users can see why validation failed
-- the exact source being locked is visible
-- two identical sources generate stable identities
-- tournament participants come from submitted/locked data, not hidden defaults
+The engine was refactored without introducing a second simulator:
 
-## Milestone 2 — Worker-backed External Execution
+```text
+engine.prepareTick()
+        ↓
+identical immutable observations
+        ↓
+Controller Worker A ─┐
+Controller Worker B ─┼─ concurrent collection + deadline/fallback
+Controller Worker C ─┘
+        ↓
+engine.resolvePreparedTick(actions)
+```
 
-### Goal
+The original synchronous `step()` now uses the same prepare/resolve core.
 
-Make the browser tournament path execute user-supplied controller source through the Worker runtime rather than the trusted local compiler.
+Delivered:
 
-### Work
+- one browser Worker runtime per external controller
+- source-policy validation before Worker startup
+- startup timeout
+- per-tick timeout
+- concurrent same-tick collection
+- neutral sanitized fallback
+- timeout/failure diagnostics outside authoritative state
+- accepted actions recorded into normal `MatchRecord`s
+- controller runtimes recreated between independent seeded matches
 
-- Define a browser evaluation coordinator around the existing async runtime protocol.
-- Start one isolated worker/runtime per controller or a documented equivalent isolation model.
-- Build observations from one immutable tick state.
-- Dispatch controller decisions concurrently.
-- Apply per-tick timeout/fallback rules.
-- Preserve authoritative resolution order in the engine.
-- Record timeout/failure diagnostics as non-authoritative runtime metadata.
-- Keep trusted sample evaluation available for tests/local development.
+Browser Workers are fault isolation, not a hardened hostile multi-tenant security boundary.
 
-### Acceptance criteria
+## Completed foundation — Milestone 3: Tournament Worker and Progress Streaming
 
-- user source never executes through `compileTrustedControllerSource()`
-- one timed-out worker cannot stall the match
-- one failed worker cannot crash another participant
-- all controllers decide from the same tick snapshot
-- replay records remain deterministic with accepted actions
+Delivered:
 
-## Milestone 3 — Tournament Worker and Progress Streaming
+- dedicated tournament orchestration Worker
+- nested per-controller Workers
+- progress messages while each match runs
+- match/tick progress exposed to the Submission Workspace
+- cancellation by terminating the tournament Worker
+- periodic yielding inside browser evaluation
+- portable final artifact identical in shape to the trusted path
+- reusable aggregation from authoritative `MatchSummary`s
 
-### Goal
+Remaining hardening before calling this production-scale:
 
-Run long multi-seed tournaments without blocking the UI.
+- configurable seed-range/preset UI instead of the current reference seed list
+- explicit 50–100 seed browser load benchmarks on target mobile/desktop devices
+- optional partial aggregate/fingerprint streaming rather than only execution progress
+- richer runtime-duration telemetry
 
-### Work
+## Mostly completed — Milestone 4: Artifact Import, Persistence and Replay UX
 
-- Move tournament orchestration into a dedicated Worker.
-- Support configurable seed lists/ranges.
-- Emit queued/running/partial/completed/failed/cancelled progress events.
-- Allow cancellation.
-- Update rankings/fingerprints incrementally where safe.
-- Avoid unnecessary duplicate state in the UI thread.
+Delivered:
 
-### Acceptance criteria
+- `TournamentArtifact` JSON parser/validator
+- ControllerLock validation during import
+- submission validation during import
+- replay-record structural validation
+- JSON file import in Tournament Lab
+- open imported evidence without rerunning controllers
+- IndexedDB storage adapter
+- automatic persistence after isolated evaluation
+- recent-evidence reopening
+- manual local save
+- Three.js replay parity with live
 
-- 50–100 seed runs do not freeze the page
-- progress is visible
-- cancellation terminates background work
-- final artifact matches the synchronous trusted schema
+Remaining polish:
 
-## Milestone 4 — Artifact Import, Persistence and Replay UX
+- event-category filters
+- artifact delete/rename UI
+- stronger schema validation for every deeply nested replay field
+- storage migration strategy for future schema versions
 
-### Goal
+## Architecture completed — Milestone 5: Production Sandbox Design
 
-Make tournament evidence reusable after the page/session ends.
+See [`SANDBOX.md`](./SANDBOX.md).
 
-### Already completed
+Specified:
 
-- Three.js replay parity with the live renderer.
-- Replay play/pause.
-- Replay speed controls.
-- Highlight jump navigation.
-- Selected-fighter focus camera.
-- Seed switching and scrubber.
+- server runtime protocol
+- one isolated runtime per controller
+- process/container/microVM options
+- startup/per-tick deadlines
+- CPU, memory, process, disk, output and network limits
+- admission validation
+- failure/fallback semantics
+- runtime diagnostics
+- public-deployment security gate
 
-### Remaining work
+Not implemented yet: the hardened server sandbox itself. Public hostile multi-tenant arbitrary-source execution must remain disabled until that deployment gate is satisfied.
 
-- Add `TournamentArtifact` parser/validator.
-- Import JSON artifact from file.
-- Open imported artifacts directly in replay/tournament inspection mode.
-- Add local persistence using IndexedDB or a storage adapter.
-- Define a storage interface that can later be server-backed.
-- Add event filters and richer replay metadata.
+## Current focus — Product Hardening + Spectator Extensions
 
-### Acceptance criteria
+### A. Evaluation hardening
 
-- exported artifact can be imported into a fresh browser session
-- imported artifact produces the same rankings/replay data
-- replay works without rerunning controllers
-- live and replay remain visually consistent
+- seed-range/preset controls
+- 50–100 seed load testing
+- partial aggregate streaming
+- runtime latency/timeout visualization
+- artifact storage management
+- deeper import schema verification
 
-## Milestone 5 — Production Sandbox Architecture
+### B. Spectator extensions
 
-### Goal
-
-Design the path for accepting hostile public submissions safely.
-
-### Work
-
-- Specify a server runtime protocol compatible with the controller action contract.
-- Evaluate process/container/VM isolation options.
-- Define startup/per-tick CPU, memory, output, filesystem and network quotas.
-- Add admission validation and source-size limits.
-- Define runtime crash/timeout telemetry.
-- Keep authoritative engine execution separate from sandbox implementation details.
-
-### Acceptance criteria
-
-- browser isolation is clearly distinguished from hostile multi-tenant isolation
-- no public deployment claims `new Function` or browser Worker alone is a secure sandbox
-- resource limits and fallback semantics are explicit
-
-## Milestone 6 — Spectator Extensions
-
-The core spectator stack now exists. Future work here should be incremental rather than another renderer rewrite.
-
-Possible additions:
-
-- replay cinematic presets for specific highlight categories
+- automatic visual quality selection for constrained devices
+- audio/SFX layer driven only from public match events
+- reduced-motion / reduced-camera-shake mode
 - richer chaos-specific environment animation
-- mobile automatic quality selection
-- audio/SFX layer
-- accessibility modes for effects and camera shake
-- arena themes that reuse the same renderer contracts
+- cinematic replay camera presets for highlight categories
+- arena themes that reuse renderer contracts
 
-## Milestone 7 — New Modes and Arenas
+### C. New strategic modes after hardening
 
-Only begin after submission + Worker + artifact foundations are stable.
-
-Possible work:
+Candidates:
 
 - alternative arena layouts
 - team mode
 - objective/control-point mode
-- hazards with meaningful strategic trade-offs
-- multiple Three.js arena themes
+- hazards that create real controller trade-offs
 
-Any new mode should first prove that it creates meaningful controller trade-offs.
+Any new mode must first demonstrate behavioral differentiation. Visual variety alone is not enough reason to change authoritative rules.
 
 ## Explicit non-goals
 
-Do not prioritize:
-
-- cosmetic skin catalogs
-- dozens of weapons without strategic purpose
-- many visually different maps with identical mechanics
-- model leaderboard claims
+- cosmetic catalogs before strategy/platform quality
+- large weapon counts without meaningful trade-offs
+- maps with different skins but identical decisions
+- serious model-benchmark claims
 - real-time LLM calls during a match
-- renderer-specific physics or collision rules
-- rewriting the authoritative engine around Three.js
+- renderer-specific physics/collision rules
+- rewriting the engine around Three.js
 - exposing hidden model chain-of-thought
+- calling browser Workers a secure public-code sandbox
 
-## Recommended implementation order
+## Current implementation order
 
 ```text
 ✓ Three.js Presentation Phase 2
+✓ Submission Workspace
+✓ Worker-backed external evaluation foundation
+✓ Tournament Worker + progress/cancel foundation
+✓ Artifact import + IndexedDB persistence
+✓ Production sandbox architecture document
         ↓
-NOW: Controller Submission Workspace
-        ↓
-2. External Worker evaluation path
-3. Tournament Worker + progress streaming
-4. Artifact import + persistence
-5. Production sandbox design
-6. Spectator extensions
-7. New modes / arenas
+NOW
+1. evaluation hardening / configurable tournaments
+2. spectator accessibility + audio + adaptive quality
+3. richer replay/artifact management
+4. strategic arena/mode experiments
+5. hardened server sandbox implementation before public arbitrary code
 ```
 
-## v2 success condition
-
-A user should be able to:
+## v2 product loop now available
 
 ```text
-paste/import several AI-generated controllers
+edit/paste AI-generated controllers
         ↓
-validate and understand failures
+validate source + strategy
         ↓
-lock exact identities
+lock exact submissions
         ↓
-run a non-blocking seeded tournament
+Tournament Worker
         ↓
-watch agents fight in a readable Three.js arena
+per-controller isolated Workers
         ↓
-inspect the same match with Three.js replay + highlights
+same-tick authoritative evaluation
         ↓
-export evidence
+behavior aggregate + replay records
         ↓
-reload/import it later without rerunning controllers
+portable artifact persisted locally
+        ↓
+Tournament Lab
+        ↓
+Three.js replay + highlights + fighter focus
+        ↓
+export / import / reopen later
 ```
 
-At that point AgentFighting is both a controller experimentation platform and a compelling visual explanation of autonomous behavior.
+The next work should improve scale, observability, accessibility and strategic depth rather than introduce another engine or presentation architecture.
