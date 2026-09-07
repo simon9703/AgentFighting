@@ -4,7 +4,7 @@
 
 **Controller Experimentation Platform + Scalable Evaluation + Spectator-Grade Three.js Presentation**
 
-The project now has one authoritative engine and two execution paths built around the same contracts:
+The project keeps one authoritative engine and renderer-neutral contracts:
 
 ```text
 trusted reference controllers ─┐
@@ -12,48 +12,58 @@ trusted reference controllers ─┐
 external controller Workers ──┘
 ```
 
-Three.js is the default product presentation, not an engine dependency.
+Three.js is the default presentation layer, never a source of combat truth.
 
-## Completed — Spectator presentation foundation
+## Architecture invariant
 
-- Three.js live arena replacing the previous DOM/CSS pseudo-arena.
-- Low-poly fighters, weapons, arena geometry, lighting, fog and shadows.
-- `ArenaFx`: trails, bursts, rings, attack/heavy arcs, dodge, shield, tracers and target links.
-- `CameraDirector`: overview, combat, KO and selected-fighter modes.
-- `ArenaPostFX`: bloom, vignette, hit flash and restrained distortion.
-- Chaos-reactive arena/post-processing presentation.
-- Observable short `intent` and movement-direction visualization without hidden reasoning.
-- Shared `ThreeArenaViewport` for live and replay.
-- Replay play/pause, 0.5×–4× speed, seed switching, scrubber, highlights and fighter focus.
-- Automatic conservative rendering profile on narrow, low-resource or reduced-motion clients.
-- Optional user-enabled procedural SFX driven only by public match events.
-- Reduced-motion camera hardening support without any simulation changes.
+```text
+Agent / Strategy / Simulation
+        ↓
+   Battle Engine
+        ↓
+BattleSnapshot / ViewModel
+        ↓
+  Renderer Layer
+   ├─ Three.js       ← battle world / animation / FX
+   └─ React DOM      ← HUD / telemetry / replay controls
+```
 
-## Completed — Controller Submission Workspace
+Rules remain fixed:
 
-`/submit` provides:
+- simulation, strategy, events and settlement do not depend on Three.js
+- all controllers observe the same prepared tick state
+- all actions are collected before authoritative resolution
+- renderer interpolation/animation cannot affect combat state
+- renderer randomness never feeds back into engine state
+- `intent` is a short public/debug label, not hidden reasoning
+- browser Workers provide fault isolation, not hardened hostile-code security
 
-- multiple editable participants
-- agent/model fields
+## Completed — Evaluation and controller platform
+
+### Controller Submission Workspace
+
+`/submit` now supports:
+
+- multiple participant drafts
+- agent/model identity fields
 - strategy-manifest JSON editing
-- controller JavaScript editing
-- canonical Zod validation
-- source-policy validation
-- visible validation errors
-- source hash and controller identity preview
+- JavaScript controller source editing
+- Zod + source-policy validation
+- source hash / controller ID preview
 - add/remove participants
 - exact-submission UI lock
-- portable submission export
-- direct isolated tournament launch after locking
+- submission bundle export
+- direct Worker-backed tournament launch
 - comma/space seed lists
-- deterministic seed ranges such as `1-50`
-- 5/20/50/100-seed presets with a 100-seed browser cap
+- ranges such as `1-50`
+- 5 / 20 / 50 / 100 seed presets
+- 100-seed browser cap
 
-The UI lock is only an editing guard. Evaluation independently creates the canonical `ControllerLock` from validated exact bytes.
+Evaluation separately builds the authoritative `ControllerLock`; the UI lock is only an editing guard.
 
-## Completed — Worker-backed external evaluation foundation
+### Same-tick authoritative engine API
 
-The engine was refactored without introducing a second simulator:
+Delivered:
 
 ```text
 engine.prepareTick()
@@ -61,189 +71,393 @@ engine.prepareTick()
 identical immutable observations
         ↓
 Controller Worker A ─┐
-Controller Worker B ─┼─ concurrent collection + deadline/fallback
+Controller Worker B ─┼─ collect concurrently + deadline/fallback
 Controller Worker C ─┘
         ↓
 engine.resolvePreparedTick(actions)
 ```
 
-The original synchronous `step()` uses the same prepare/resolve core.
+The trusted synchronous `step()` path uses the same prepare/resolve core.
+
+### Browser Worker evaluation
 
 Delivered:
 
-- one browser Worker runtime per external controller
-- source-policy validation before Worker startup
+- one Worker runtime per external controller
+- source-policy validation before startup
 - startup timeout
 - per-tick timeout
-- concurrent same-tick collection
-- neutral sanitized fallback
-- accepted actions recorded into normal `MatchRecord`s
-- controller runtimes recreated between independent seeded matches
-- timeout/failure counters outside authoritative state
-- per-controller decision latency sampling, average and maximum latency
+- concurrent same-tick action collection
+- neutral sanitized fallback actions
+- controller runtime recreation per seed
+- timeout/failure diagnostics
+- per-controller latency sampling
+- average/max latency reporting
 
-Browser Workers are fault isolation, not a hardened hostile multi-tenant security boundary.
-
-## Completed foundation — Tournament Worker + progress
+### Tournament Worker
 
 Delivered:
 
 - dedicated tournament orchestration Worker
-- nested per-controller Workers
-- progress messages while each match runs
-- match/tick progress exposed to Submission Workspace
-- cancellation by terminating the Tournament Worker
-- periodic browser yielding
-- final artifact matching the trusted path schema
-- reusable authoritative `MatchSummary` aggregation
-- partial tournament/leader aggregate after each completed seed
-- live current-decision latency display
-- completion summary for timeout/failure counts and slowest average controller latency
+- nested controller Workers
+- progress by seed/tick
+- partial tournament rankings after each completed seed
+- current decision latency display
+- cancellation
+- periodic yielding
+- final artifact using the same schema as trusted evaluation
 
-Remaining validation before calling browser execution production-scale:
+Remaining scale validation:
 
-- explicit 50–100 seed load benchmark runs on representative desktop/mobile devices
-- benchmark history and regression thresholds
+- representative desktop/mobile 50–100 seed benchmark runs
+- benchmark history
+- regression thresholds
 
-## Mostly completed — Artifact import, persistence and replay UX
+## Completed — Evidence / replay loop
 
 Delivered:
 
-- `TournamentArtifact` JSON parser/validator
-- ControllerLock validation during import
-- submission validation during import
-- replay-record structural validation
-- JSON import in Tournament Lab
-- imported replay without rerunning controllers
-- IndexedDB storage adapter
-- automatic persistence after isolated evaluation
-- recent-evidence reopening
-- manual local save
-- Three.js replay parity with live
+- versioned `TournamentArtifact`
+- ControllerLock validation
+- submission validation
+- deep replay/world-state validation
+- strict replay tick ordering checks
+- replay seed/config consistency validation
+- controller identity consistency validation
+- JSON import
+- replay without rerunning controllers
+- IndexedDB persistence
+- automatic save after isolated evaluation
+- recent evidence reopening
+- manual save/export
+- shared Three.js live/replay renderer
+- replay play/pause
+- 0.5× / 1× / 2× / 4× playback
+- seed switching
+- scrubber
+- highlight jumps
+- selected fighter focus
 
-Remaining product hardening:
+Remaining storage work:
 
-- artifact delete/rename/storage management UI
-- deeper validation for every nested replay/world-state field
-- storage migration strategy for future schema versions
-- optional event-category filters
+- artifact delete
+- artifact rename/label metadata
+- storage usage management
+- schema migration policy
 
-## Architecture completed — Production sandbox design
+## Completed — Three.js spectator foundation
 
-See [`SANDBOX.md`](./SANDBOX.md).
+Delivered:
 
-Specified:
+- full-screen/full-bleed Three.js arena
+- broadcast-style React HUD overlay instead of dashboard layout
+- articulated low-poly mech fighters
+- arena platform, lower deck, cover, walls and towers
+- stronger depth and vertical composition
+- ground weapon pickups
+- world-space fighter labels
+- fighter name / damage / intent labels
+- fighter interpolation
+- authoritative velocity orientation
+- selection focus state
+- chaos-reactive lighting
+- adaptive high/low quality profiles
+- reduced-motion support
 
-- server runtime protocol
-- one isolated runtime per controller
-- process/container/microVM implementation options
-- startup/per-tick deadlines
-- CPU, memory, process, disk, output and network limits
-- admission validation
-- failure/fallback semantics
-- runtime diagnostics
-- public-deployment security gate
+### Presentation FX
 
-Not implemented: the hardened server sandbox itself. Public hostile multi-tenant arbitrary-source execution must remain disabled until the deployment gate is satisfied.
+`ArenaFx` currently provides:
 
-## Current focus — hardening and strategic depth
+- hit/KO bursts
+- movement trails
+- event rings
+- normal/heavy attack arcs
+- weapon beam
+- dodge FX
+- shield FX
+- target links
 
-### A. Evaluation / evidence hardening
+### Camera + post FX
 
-1. run and record 50–100 seed target-device benchmarks
-2. define performance/regression thresholds
-3. deepen artifact/replay schema verification
-4. add artifact rename/delete/storage-management UI
-5. define artifact storage migration policy
+Delivered:
 
-### B. Spectator polish
+- `CameraDirector`
+  - overview
+  - combat
+  - KO
+  - selected-fighter focus
+  - lower spectator/broadcast framing
+  - shake/emphasis
+- `ArenaPostFX`
+  - bloom
+  - vignette
+  - hit flash
+  - restrained energy/chromatic distortion
+- procedural event SFX from public `MatchEvent`s only
 
-Already delivered:
+## Completed foundation — Fighter presentation rig
 
-- adaptive low/high renderer selection
-- OS reduced-motion-aware conservative profile
-- procedural event SFX with explicit user enable
+New renderer-only `FighterRig` layer is now separated from `ThreeArenaViewport`.
 
-Remaining:
+Current rig behavior:
 
-- explicit in-product reduced-camera-shake toggle independent of OS preference
-- replay audio and event-category sound controls
-- richer chaos-specific environment animation
-- cinematic replay camera presets for highlight categories
-- reusable arena themes
+```text
+authoritative velocity
+→ stride cycle
+→ arm counter-swing
+→ body lean
+→ body bob
 
-### C. Strategic mode experiments
+authoritative intent/event
+→ attack pose
+→ heavy pose
+→ dodge pose
+→ hit recoil
+→ KO lean
+→ respawn pulse
+```
 
-Only after the current hardening baseline is measured:
+Held weapons are now rendered from authoritative `fighter.weapon` state:
+
+- hammer
+- shield
+- bomb
+- push gun
+
+No rig animation affects engine motion, collision, hit resolution, damage or stocks.
+
+## Current focus — Combat presentation phase
+
+This is now the highest-priority product work because the architecture/evaluation foundation is already strong enough and the largest visible gap is fight readability.
+
+### A. Fighter action state machine
+
+Upgrade the current continuous pose reactions into explicit presentation phases:
+
+```text
+idle
+run
+attack.windup
+attack.active
+attack.recovery
+heavy.windup
+heavy.active
+heavy.recovery
+dodge
+hit
+ko
+respawn
+```
+
+Goals:
+
+- attacks should visually read as discrete actions instead of short arm offsets
+- heavy attacks need clear charge → release → recovery
+- dodge needs clear directional burst/posture
+- hit reaction should have readable recoil
+- KO should visually communicate launch/rotation/removal
+- respawn should have a clear landing/re-entry moment
+
+This remains renderer-only; authoritative action timing continues to come from engine snapshots/events.
+
+### B. Weapon-specific animation
+
+Implement distinct held-weapon presentation:
+
+- hammer: large two-stage swing / heavy follow-through
+- shield: raise/brace forward
+- push gun: raise, fire and recoil
+- bomb: lift, throw arc and release FX
+
+Weapon use visuals should consume existing authoritative weapon state/events. Do not add renderer-owned weapon rules.
+
+### C. Event reaction layer
+
+Keep per-fighter transient presentation reactions:
+
+```text
+Map<fighterId, {
+  attack,
+  heavy,
+  dodge,
+  hit,
+  ko,
+  respawn
+}>
+```
+
+Next improvements:
+
+- derive hit recoil direction from actor/target positions
+- distinguish stock-loss vs final elimination
+- emphasize successful heavy hits
+- distinguish weapon-use reactions by weapon type
+- avoid replay divergence by deriving all triggers from recorded public events/state
+
+### D. Camera choreography
+
+After action phases are readable:
+
+- pair framing for nearby combatants
+- brief heavy-hit push-in
+- weapon-use emphasis
+- KO tracking without losing arena context
+- highlight replay camera presets
+- reduced-camera-shake user toggle independent of OS preference
+
+### E. Arena readability
+
+Improve the world only where it helps strategy and viewing:
+
+- clearer arena boundary/death edge
+- clearer cover readability
+- better weapon spawn readability
+- restrained chaos environment animation
+- reusable arena-theme primitives
+
+Do not add decorative geometry that hides fighters or confuses authoritative collision boundaries.
+
+## Next — Code organization cleanup
+
+`ThreeArenaViewport.tsx` is still too large. After fighter/weapon action work stabilizes, extract:
+
+```text
+ThreeArenaViewport
+├─ ArenaEnvironment.ts
+├─ FighterRig.ts
+├─ WeaponVisual.ts
+├─ ArenaLabels.ts
+├─ ArenaFx.ts
+├─ CameraDirector.ts
+└─ ArenaPostFX.ts
+```
+
+Goals:
+
+- viewport orchestrates only lifecycle + authoritative synchronization
+- environment owns static/decorative world geometry
+- rig owns fighter presentation
+- weapon module owns pickup + held weapon model creation
+- labels own CanvasTexture/Sprite lifecycle
+- no combat rules move into presentation modules
+
+## Next — Dependency / deployment cleanup
+
+Completed recently:
+
+- removed stale `pnpm-lock.yaml` that no longer matched `package.json`
+- removed unused R3F / Drei / Rapier / Tailwind / clsx / lucide dependencies
+- current runtime uses plain Three.js
+- CI installs from current `package.json`
+
+Follow-up:
+
+- regenerate and commit a fresh `pnpm-lock.yaml` from a normal networked pnpm environment
+- restore frozen-lockfile CI after the clean lockfile exists
+- keep Vercel and GitHub Actions dependency behavior aligned
+
+## Later — Evaluation hardening
+
+After combat presentation reaches a stable spectator-quality baseline:
+
+1. run 50–100 seed benchmarks on representative devices
+2. record baseline timings
+3. define regression thresholds
+4. add artifact delete/rename/storage UI
+5. define artifact migration policy
+6. add optional event/audio filters
+
+## Later — Strategic mode experiments
+
+Only add new authoritative modes when they create measurable behavior differences:
 
 - alternative arena layouts
 - team mode
-- objective/control-point mode
-- hazards that create measurable controller trade-offs
+- control-point/objective mode
+- hazards with real trade-offs
 
-Any new mode must demonstrate behavioral differentiation. Visual variety alone is not enough reason to alter authoritative rules.
+Visual variety alone is not enough reason to alter simulation rules.
 
-## Explicit non-goals
+## Later — Hardened public sandbox
 
-- cosmetic catalogs before strategy/platform quality
-- large weapon counts without meaningful trade-offs
-- maps with different skins but identical decisions
-- serious model-benchmark claims
-- real-time LLM calls during a match
-- renderer-specific physics/collision rules
-- rewriting the engine around Three.js
-- exposing hidden model chain-of-thought
-- calling browser Workers a secure public-code sandbox
+The production sandbox architecture is documented in `SANDBOX.md`.
+
+Still required before public hostile arbitrary-source execution:
+
+- server process/container/microVM runtime
+- CPU/memory/process/disk/network limits
+- hard startup/per-tick deadlines
+- output/log limits
+- abuse controls
+- deployment security review
+
+Browser Workers remain a browser fault-isolation layer only.
 
 ## Current implementation order
 
 ```text
-✓ Three.js spectator foundation
-✓ Submission Workspace
-✓ Worker-backed external evaluation
+✓ authoritative headless engine
+✓ same-tick prepare/resolve API
+✓ controller submission workspace
+✓ Worker-backed external controller evaluation
 ✓ Tournament Worker + progress/cancel
-✓ partial aggregates + runtime latency diagnostics
-✓ configurable seeds / 5-100 seed presets
-✓ Artifact import + IndexedDB persistence
-✓ adaptive rendering + public-event SFX
-✓ Production sandbox architecture document
+✓ partial aggregates + latency diagnostics
+✓ configurable 5–100 seed evaluation
+✓ ControllerLock + source identity
+✓ TournamentArtifact + deep validation
+✓ IndexedDB persistence/import/export
+✓ shared Three.js live/replay renderer
+✓ full-screen broadcast-style 3D arena
+✓ CameraDirector + ArenaPostFX + ArenaFx + SFX
+✓ FighterRig foundation
+✓ authoritative held-weapon visuals
+✓ dependency cleanup to plain Three.js
         ↓
 NOW
-1. target-device 50–100 seed benchmarks
-2. deep artifact validation + storage management
-3. spectator accessibility/replay polish
-4. strategic arena/mode experiments
-5. hardened server sandbox before public hostile arbitrary code
+1. discrete fighter action state machine
+2. weapon-specific attack/use animation
+3. directional hit / KO / respawn reactions
+4. combat-pair camera choreography
+5. arena readability polish
+6. split ThreeArenaViewport into presentation modules
+        ↓
+NEXT
+7. 50–100 seed target-device benchmarking
+8. artifact storage-management/migrations
+9. strategic arena/mode experiments
+10. hardened server sandbox
 ```
 
-## v2 product loop now available
+## Product loop
 
 ```text
-edit/paste AI-generated controllers
+AI-generated controller source
         ↓
-validate source + strategy
+validate + inspect strategy metadata
         ↓
 lock exact submissions
         ↓
-choose deterministic seed set/range
+choose deterministic seed set
         ↓
 Tournament Worker
         ↓
-per-controller isolated Workers
+per-controller Worker isolation
         ↓
 same-tick authoritative evaluation
         ↓
-partial aggregates + runtime diagnostics
+partial aggregates + diagnostics
         ↓
-behavior aggregate + replay records
+behavior summary + replay records
         ↓
-portable artifact persisted locally
+versioned TournamentArtifact
+        ↓
+IndexedDB / export / import
         ↓
 Tournament Lab
         ↓
-Three.js replay + highlights + fighter focus
+shared Three.js replay
         ↓
-export / import / reopen later
+combat animation + camera + telemetry
 ```
 
-Next work should improve measured scale, evidence robustness, accessibility and strategic depth rather than introduce another engine or presentation architecture.
+The next phase should improve **fight readability, visible strategy differentiation and spectator quality** without weakening the authoritative engine boundary.
